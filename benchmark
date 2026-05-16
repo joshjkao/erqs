@@ -1,0 +1,12 @@
+#!/bin/bash
+
+MAX_DEPTH=$1
+N_TERMS=$2
+N_FACTORS=$3
+N_BITS=$4
+
+# valgrind --tool=massif --stack=yes --massif-out-file=output/massif.out ./build/benchmark $MAX_DEPTH $N_TERMS $N_FACTORS $N_BITS > output/erqs.out
+
+# ms_print output/massif.out | head -n 40 > output/graph.out
+
+../build/benchmark $MAX_DEPTH $N_TERMS $N_FACTORS $N_BITS
