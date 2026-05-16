@@ -43,7 +43,7 @@ cd python
 uv sync
 ```
 
-Open the $main.py$ to see how the parameter sweep is defined. As is, `run_all()` will run a parameter sweep using one cpu. `run_all_parallel()` will run a parameter sweep using all available cpus.
+Open the `main.py` to see how the parameter sweep is defined. As is, `run_all()` will run a parameter sweep using one cpu. `run_all_parallel()` will run a parameter sweep using all available cpus.
 
 Either function will output a file $out.csv$ containing the results of each trial in the parameter sweep.
 
