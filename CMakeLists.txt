@@ -38,8 +38,8 @@ add_executable(main main.cpp)
 target_link_libraries(main PRIVATE erqs NLopt::nlopt)
 
 # executable for optimizing
-add_executable(opt opt.cpp)
-target_link_libraries(opt PRIVATE erqs NLopt::nlopt)
+# add_executable(opt opt.cpp)
+# target_link_libraries(opt PRIVATE erqs NLopt::nlopt)
 
 # # tests
 # include(FetchContent)

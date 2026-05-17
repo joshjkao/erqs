@@ -343,7 +343,7 @@ ptr_variant Simplify(std::shared_ptr<ProductState> &ptr) {
     auto tuple_if_pure = get_tuple_if_pure(sum);
     if (tuple_if_pure) {
       auto &[tup_coeff, tup_space, tup_bits] = tuple_if_pure.value();
-      coeff *= coeff;
+      coeff *= tup_coeff;
       space |= tup_space;
       bits |= tup_bits;
     } else {
@@ -355,7 +355,9 @@ ptr_variant Simplify(std::shared_ptr<ProductState> &ptr) {
   if (sums.empty()) {
     // sums empty means we should return the pure state directly instead of
     // wrapping it in a product
-    return temp_pure;
+    if (coeff == complex{1.0})
+      return temp_pure;
+    return MakeProduct({MakeSum({coeff}, {temp_pure})});
   } else {
     // otherwise, we have nontrivial sum states
     if (space.any() || coeff != complex{1.0}) {
