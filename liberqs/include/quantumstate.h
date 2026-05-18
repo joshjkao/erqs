@@ -112,16 +112,7 @@ void Print(const ptr_variant &ptr, size_t indent = 0);
 void Print(const KetBra &kb);
 void Print(const SkewOperator &op);
 std::ostream &operator<<(std::ostream &os, const KetBra &kb);
-bool Equals(const PureState &pure1, const PureState &pure2);
-bool Equals(const ProductState &prod1, const ProductState &prod2);
-bool Equals(const ProductState &prod1, const PureState &pure2);
-bool Equals(const PureState &pure1, const ProductState &prod2);
-bool Equals(const SumState &sum1, const SumState &sum2);
-bool Equals(const KetBra &kb1, const KetBra &kb2);
-bool operator==(const PureState &pure1, const PureState &pure2);
-bool operator==(const ProductState &prod1, const ProductState &prod2);
-bool operator==(const SumState &sum1, const SumState &sum2);
-bool operator==(const KetBra &kb1, const KetBra &kb2);
+
 void Flatten(std::shared_ptr<SumState> &root);
 complex Inner_slow(const std::shared_ptr<SumState> &p1,
                    const std::shared_ptr<SumState> &p2);

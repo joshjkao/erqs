@@ -10,39 +10,30 @@ static bool validate_sum_helper(const std::shared_ptr<SumState> &sum,
 
 bool Validate(const std::shared_ptr<PureState> &pure,
               const ValidationArgs &args) {
-  bool log = args.log_to_stdout;
   bool ret = true;
-  if (args.check_no_single_sum_states) {
-    // unused
-  }
-  if (args.check_no_single_prod_states) {
-    // unused
-  }
-  if (args.check_product_subspaces) {
-    // unused
-  }
-  if (args.check_sum_subspaces) {
-    // unused
-  }
+  auto handle_error = [&](const std::string &msg) {
+    if (args.log_to_stdout)
+      std::cout << msg << "\n";
+    ret = false;
+  };
+
   if (args.check_pure_support) {
     if ((pure->bits & pure->space) != pure->bits) {
-      if (log) {
-        std::cout << "pure state bits must be a subset of its subspace";
-        Print(pure);
-      }
-      ret = false;
+      handle_error("pure state bits must be a subset of its subspace");
     }
-  }
-  if (args.check_sum_list_sizes) {
-    // unused
   }
   return ret;
 }
 
 bool Validate(const std::shared_ptr<ProductState> &prod,
               const ValidationArgs &args) {
-  bool log = args.log_to_stdout;
   bool ret = true;
+  auto handle_error = [&](const std::string &msg) {
+    if (args.log_to_stdout)
+      std::cout << msg << "\n";
+    ret = false;
+  };
+
   for (const auto &sum : prod->states) {
     if (!validate_sum_helper(sum, args, false))
       ret = false;
@@ -50,57 +41,36 @@ bool Validate(const std::shared_ptr<ProductState> &prod,
 
   if (args.check_no_single_sum_states) {
     if (prod->states.empty()) {
-      if (log) {
-        std::cout << "product states must not be empty";
-        Print(prod);
-      }
-      ret = false;
+      handle_error("product states must not be empty");
     } else if (prod->states.size() == 1) {
-      if (log) {
-        std::cout << "product states holding a single sum state are redundant";
-        Print(prod);
-      }
-      ret = false;
+      handle_error("product states holding a single sum state are redundant");
     }
-  }
-  if (args.check_no_single_prod_states) {
-    // unused
-  }
-  if (args.check_product_subspaces) {
-    // unused
   }
   if (args.check_sum_subspaces) {
     QSpace space{0};
     for (const auto &child : prod->states) {
       if ((space & child->space).any()) {
-        if (log) {
-          std::cout << "product states must be over disjoint subspaces";
-          ret = false;
-        }
+        handle_error("product states must be over disjoint subspaces");
       }
       space |= child->space;
     }
     if (space != prod->space) {
-      if (log) {
-        std::cout
-            << "declared subspace of product state doesn't match the union "
-               "of its children";
-      }
-      ret = false;
+      handle_error("declared subspace of product state doesn't match the union "
+                   "of its children");
     }
-  }
-  if (args.check_pure_support) {
-  }
-  if (args.check_sum_list_sizes) {
-    // unused
   }
   return ret;
 }
 
 static bool validate_sum_helper(const std::shared_ptr<SumState> &sum,
                                 const ValidationArgs &args, bool is_root) {
-  bool log = args.log_to_stdout;
   bool ret = true;
+  auto handle_error = [&](const std::string &msg) {
+    if (args.log_to_stdout)
+      std::cout << msg << "\n";
+    ret = false;
+  };
+
   for (const auto &var : sum->states) {
     bool child_ret =
         std::visit([&](const auto &v) { return Validate(v, args); }, var);
@@ -108,51 +78,29 @@ static bool validate_sum_helper(const std::shared_ptr<SumState> &sum,
       ret = false;
   }
 
-  if (args.check_no_single_sum_states) {
-    // unused
-  }
   if (args.check_no_single_prod_states) {
     if (sum->states.empty()) {
-      if (log) {
-        std::cout << "sum states must not be empty";
-      }
-      ret = false;
+      handle_error("sum states must not be empty");
     } else if (sum->states.size() == 1) {
       if (std::holds_alternative<std::shared_ptr<ProductState>>(
               sum->states[0]) &&
           !is_root) {
-        if (log) {
-          std::cout
-              << "sum states holding a single product state are redundant";
-        }
-        ret = false;
+        handle_error("sum states holding a single product state are redundant");
       }
     }
-  }
-  if (args.check_product_subspaces) {
-    // unused
   }
   if (args.check_sum_subspaces) {
     QSpace decl_space = sum->space;
     for (const auto &var : sum->states) {
       if (GetSpace(var) != decl_space) {
-        if (log) {
-          std::cout << "child space of a sum doesn't match its declared space";
-        }
-        ret = false;
+        handle_error("child space of a sum doesn't match its declared space");
       }
     }
   }
-  if (args.check_pure_support) {
-    // unused
-  }
   if (args.check_sum_list_sizes) {
     if (sum->states.size() != sum->coeffs.size()) {
-      if (log) {
-        std::cout << "sum states must hold the same number of coefficients and "
-                     "states";
-      }
-      ret = false;
+      handle_error(
+          "sum states must hold the same number of coefficients and states");
     }
   }
   return ret;
@@ -163,7 +111,57 @@ bool Validate(const std::shared_ptr<SumState> &sum,
   return validate_sum_helper(sum, args, true);
 }
 
-bool Validate(const SkewOperator &op, const ValidationArgs &args);
+bool Validate(const KetBra &kb, const ValidationArgs &args) {
+  bool log = args.log_to_stdout;
+  bool ret = true;
+  bool check_ket =
+      std::visit([&](const auto &var) { return Validate(var, args); }, kb.ket);
+  bool check_bra =
+      std::visit([&](const auto &var) { return Validate(var, args); }, kb.bra);
+  if (!check_ket | !check_bra)
+    ret = false;
+
+  if (args.check_ketbra_subspaces) {
+    if ((GetSpace(kb.bra) & GetSpace(kb.ket)).any()) {
+      if (log) {
+        std::cout << "ketbra ket and bra subspaces must be disjoint";
+      }
+      ret = false;
+    }
+  }
+
+  return ret;
+}
+
+bool Validate(const SkewOperator &op, const ValidationArgs &args) {
+  bool ret = true;
+  auto handle_error = [&](const std::string &msg) {
+    if (args.log_to_stdout)
+      std::cout << msg << "\n";
+    ret = false;
+  };
+
+  for (const auto &kb : op.ketbras) {
+    if (!Validate(kb, args))
+      ret = false;
+  }
+
+  if (args.check_skewop_redundant_constants) {
+    auto kb_is_constant = [](const KetBra &kb) {
+      return (GetSpace(kb.ket) | GetSpace(kb.bra)).none();
+    };
+    bool has_a_const = false;
+    for (const auto &kb : op.ketbras) {
+      if (kb_is_constant(kb) && !has_a_const)
+        has_a_const = true;
+      else if (kb_is_constant(kb)) {
+        handle_error("skewoperator as redundant constant terms");
+      }
+    }
+  }
+
+  return ret;
+}
 
 bool CheckEqual_slow(const std::shared_ptr<SumState> &sum1,
                      const std::shared_ptr<SumState> &sum2) {
