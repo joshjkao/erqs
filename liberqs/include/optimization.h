@@ -23,5 +23,6 @@ void RemoveSingles(std::shared_ptr<SumState> &root);
 void SquashPures(std::shared_ptr<SumState> &root);
 // void Factorize(std::shared_ptr<SumState> &root);
 
-ptr_variant Simplify(ptr_variant &var);
-std::shared_ptr<SumState> Simplify(std::shared_ptr<SumState> &ptr);
+[[nodiscard]] ptr_variant Simplify(ptr_variant &var);
+[[nodiscard]] std::shared_ptr<SumState>
+Simplify(std::shared_ptr<SumState> &ptr);

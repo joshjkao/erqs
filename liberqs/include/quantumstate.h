@@ -122,6 +122,9 @@ bool Equals(const std::shared_ptr<PureState> &p1,
             const std::shared_ptr<PureState> &p2);
 bool Equals_slow(const std::shared_ptr<SumState> &sum1,
                  const std::shared_ptr<SumState> &sum2);
+inline bool operator==(const PureState &ps1, const PureState &ps2) {
+  return ps1.bits == ps2.bits && ps1.space == ps2.space;
+}
 
 // ---- HELPER ALGORITHMS ---- //
 struct Visitor {

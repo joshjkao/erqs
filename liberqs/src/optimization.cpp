@@ -10,6 +10,7 @@
 #include <ranges>
 #include <stdexcept>
 #include <unordered_map>
+#include <variant>
 
 static void set_coefficients(std::vector<complex> &,
                              std::shared_ptr<PureState> &) {
@@ -26,6 +27,8 @@ static void set_coefficients(std::vector<complex> &coeffs,
 static void set_coefficients(std::vector<complex> &coeffs,
                              std::shared_ptr<SumState> &state) {
   for (auto &c : state->coeffs) {
+    if (coeffs.empty())
+      throw std::runtime_error("not enough coefficients to set");
     c = coeffs.back();
     coeffs.pop_back();
   }
@@ -37,6 +40,8 @@ void SetCoefficients(const std::vector<complex> &coeffs,
                      std::shared_ptr<SumState> &state) {
   auto coeffscp = coeffs;
   set_coefficients(coeffscp, state);
+  if (!coeffscp.empty())
+    throw std::runtime_error("too many coefficients passed to set");
 }
 void SetCoefficients(const std::vector<double> &coeffs,
                      std::shared_ptr<SumState> &state) {
@@ -145,7 +150,8 @@ void Prune(std::shared_ptr<SumState> &root, double threshold) {
     double re = root->coeffs[i].real();
     double im = root->coeffs[i].imag();
     double mag = (re * re + im * std::conj(im)).real();
-    if (mag >= threshold && prune_should_keep(root->states[i])) {
+
+    if (std::sqrt(mag) >= threshold && prune_should_keep(root->states[i])) {
       coeffs_new.push_back(root->coeffs[i]);
       states_new.push_back(root->states[i]);
     }
@@ -339,6 +345,8 @@ ptr_variant Simplify(std::shared_ptr<ProductState> &ptr) {
   std::vector<std::shared_ptr<SumState>> sums;
   for (auto &sum : ptr->states) {
     sum = Simplify(sum);
+  }
+  for (auto &sum : ptr->states) {
     auto tuple_if_pure = get_tuple_if_pure(sum);
     if (tuple_if_pure) {
       auto &[tup_coeff, tup_space, tup_bits] = tuple_if_pure.value();
@@ -377,12 +385,27 @@ std::shared_ptr<SumState> Simplify(std::shared_ptr<SumState> &ptr) {
   std::vector<ptr_variant> vars;
   for (auto &&[coeff, var] : std::views::zip(ptr->coeffs, ptr->states)) {
     var = Simplify(var);
+  }
+
+  for (auto &&[coeff, var] : std::views::zip(ptr->coeffs, ptr->states)) {
     auto tuple_if_pure =
         std::visit([](auto &v) { return get_tuple_if_pure(v); }, var);
     if (tuple_if_pure) {
       auto &[tup_coeff, tup_space, tup_bits] = tuple_if_pure.value();
       PureTuple tuple{tup_space, tup_bits};
       pures[tuple] += coeff * tup_coeff;
+    } else if (std::holds_alternative<std::shared_ptr<ProductState>>(var)) {
+      auto prod = std::get<std::shared_ptr<ProductState>>(var);
+      if (prod->states.size() == 1) {
+        for (auto &&[child_coeff, child_var] : std::views::zip(
+                 prod->states[0]->coeffs, prod->states[0]->states)) {
+          coeffs.push_back(coeff * child_coeff);
+          vars.push_back(child_var);
+        }
+      } else {
+        coeffs.push_back(coeff);
+        vars.push_back(var);
+      }
     } else {
       coeffs.push_back(coeff);
       vars.push_back(var);

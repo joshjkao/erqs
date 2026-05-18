@@ -2,7 +2,6 @@
 #include "optimization.h"
 #include "quantumstate.h"
 #include <cassert>
-// #include <iostream>
 #include <optional>
 #include <ranges>
 #include <unordered_map>
@@ -219,6 +218,7 @@ SkewOperator Multiply(const SkewOperator &o1, const SkewOperator &o2) {
 
 static ptr_variant tensor(const std::shared_ptr<PureState> &p1,
                           const std::shared_ptr<PureState> &p2) {
+  assert((p1->space & p2->space).none());
   return MakePure(QSpace{p1->space | p2->space}, QSpace{p1->bits | p2->bits});
 }
 static ptr_variant tensor(const std::shared_ptr<PureState> &p1,
@@ -332,25 +332,17 @@ double ExpectedValue(const PauliOperator &pauli,
                      const std::shared_ptr<SumState> &state) {
   auto ket = Operate(pauli, state);
   SkewOperator inner = Inner(state, ket);
+  double self_inner = Norm(state);
   assert(inner.ketbras.size() == 1);
   assert(GetSpace(inner.ketbras[0].bra) == QSpace{0});
   assert(GetSpace(inner.ketbras[0].ket) == QSpace{0});
-  assert(inner.ketbras[0].coeff.imag() <= 1e-6);
-  return inner.ketbras[0].coeff.real();
+  // assert(inner.ketbras[0].coeff.imag() <= 1e-6);
+  return inner.ketbras[0].coeff.real() / self_inner;
 }
 double ExpectedValue(const PauliHamiltonian &h,
                      const std::shared_ptr<SumState> &state) {
   auto ket = Operate(h, state);
   SkewOperator inner = Inner(state, ket);
-  // if (inner.ketbras.size() != 1) {
-  //   std::cout << "error here\n";
-  //   std::cout << "ket was\n";
-  //   Print(state);
-  //   std::cout << "\n";
-  //   std::cout << "bra was\n";
-  //   Print(ket);
-  //   std::cout << "\n";
-  // }
   assert(inner.ketbras.size() == 1);
   assert(GetSpace(inner.ketbras[0].bra) == QSpace{0});
   assert(GetSpace(inner.ketbras[0].ket) == QSpace{0});

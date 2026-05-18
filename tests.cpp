@@ -135,14 +135,40 @@ TEST(Validate, Skewop_Redundant_Pures) {
   // todo
 }
 
+// We know this is broken, but we should just use Simplify instead
+// TEST(RemoveSingles, BasicSum) {
+//   auto pure1 = MakePure("1111", "1111");
+//   auto sum1 = MakeSum({1}, {pure1});
+//   auto prod1 = MakeProduct({sum1});
+//   auto sum2 = MakeSum({1}, {prod1});
+//   Print(sum2);
+//   EXPECT_FALSE(Validate(sum2, ValidationArgs{.log_to_stdout = false}));
+//   RemoveSingles(sum2);
+//   Print(sum2);
+//   EXPECT_TRUE(Validate(sum2, ValidationArgs{}));
+// }
+
 TEST(Simplify, Redundant_Pures) {
   auto pure1 = MakePure("00001111", "00001111");
   auto pure2 = MakePure("00001111", "00001111");
   auto sum1 = MakeSum({2, 3}, {pure1, pure2});
+  EXPECT_FALSE(Validate(sum1, ValidationArgs{.log_to_stdout = false}));
   auto sum1_simple = Simplify(sum1);
   EXPECT_TRUE(Validate(sum1_simple, ValidationArgs{}));
   EXPECT_TRUE(sum1_simple->coeffs.size() == 1);
   EXPECT_TRUE(Equals_slow(sum1_simple, sum1));
+}
+
+TEST(Simplify, SingleStates) {
+  auto pure1 = MakePure("1111", "1111");
+  auto sum1 = MakeSum({2}, {pure1});
+  auto prod1 = MakeProduct({sum1});
+  auto sum2 = MakeSum({3}, {prod1});
+  auto prod2 = MakeProduct({sum2});
+  auto sum3 = MakeSum({4}, {prod2});
+  EXPECT_FALSE(Validate(sum3, ValidationArgs{.log_to_stdout = false}));
+  sum3 = Simplify(sum3);
+  EXPECT_TRUE(Validate(sum3, ValidationArgs{}));
 }
 
 TEST(Simplify, Sum) {
@@ -158,6 +184,6 @@ TEST(Simplify, Sum) {
   auto root = MakeSum({complex{1.0, 0.0}}, {prod1});
   EXPECT_FALSE(Validate(root, ValidationArgs{.log_to_stdout = false}));
   auto root_simple = Simplify(root);
-  EXPECT_TRUE(Validate(root, ValidationArgs{}));
+  EXPECT_TRUE(Validate(root_simple, ValidationArgs{}));
   EXPECT_TRUE(Equals_slow(root, root_simple));
 }

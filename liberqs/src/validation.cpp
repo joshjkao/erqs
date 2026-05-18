@@ -2,14 +2,20 @@
 #include "quantumstate.h"
 #include <iostream>
 #include <memory>
+#include <unordered_set>
 #include <variant>
 
 bool Validate(const std::shared_ptr<PureState> &pure,
               const ValidationArgs &args) {
   bool ret = true;
   auto handle_error = [&](const std::string &msg) {
-    if (args.log_to_stdout)
+    if (args.log_to_stdout) {
       std::cout << msg << "\n";
+      if (args.log_state_on_error) {
+        Print(pure);
+        std::cout << "\n";
+      }
+    }
     ret = false;
   };
 
@@ -25,8 +31,13 @@ bool Validate(const std::shared_ptr<ProductState> &prod,
               const ValidationArgs &args) {
   bool ret = true;
   auto handle_error = [&](const std::string &msg) {
-    if (args.log_to_stdout)
+    if (args.log_to_stdout) {
       std::cout << msg << "\n";
+      if (args.log_state_on_error) {
+        Print(prod);
+        std::cout << "\n";
+      }
+    }
     ret = false;
   };
 
@@ -58,12 +69,38 @@ bool Validate(const std::shared_ptr<ProductState> &prod,
   return ret;
 }
 
+// needed to perform compression
+struct PureStateHash {
+  std::size_t operator()(const PureState &t) const {
+    std::size_t seed = 0;
+
+    // Boost's hash_combine algorithm
+    auto hash_combine = [&seed](std::size_t hash_value) {
+      seed ^= hash_value + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+    };
+
+    // 2. Hash the four std::bitset<N> elements
+    std::hash<BitString> bitset_hasher;
+    // hash_combine(bitset_hasher(std::get<0>(t)));
+    // hash_combine(bitset_hasher(std::get<1>(t)));
+    hash_combine(bitset_hasher(t.space));
+    hash_combine(bitset_hasher(t.bits));
+
+    return seed;
+  }
+};
+
 bool Validate(const std::shared_ptr<SumState> &sum,
               const ValidationArgs &args) {
   bool ret = true;
   auto handle_error = [&](const std::string &msg) {
-    if (args.log_to_stdout)
+    if (args.log_to_stdout) {
       std::cout << msg << "\n";
+      if (args.log_state_on_error) {
+        Print(sum);
+        std::cout << "\n";
+      }
+    }
     ret = false;
   };
 
@@ -96,6 +133,20 @@ bool Validate(const std::shared_ptr<SumState> &sum,
     if (sum->states.size() != sum->coeffs.size()) {
       handle_error(
           "sum states must hold the same number of coefficients and states");
+    }
+  }
+  if (args.check_redundant_pure_states) {
+    std::unordered_set<PureState, PureStateHash> pures;
+    for (const auto &var : sum->states) {
+      if (std::holds_alternative<std::shared_ptr<PureState>>(var)) {
+        std::shared_ptr<PureState> pure_ptr =
+            std::get<std::shared_ptr<PureState>>(var);
+        if (pures.contains(*pure_ptr)) {
+          handle_error("sums shouldn't contain duplicate pure states");
+        } else {
+          pures.insert(*pure_ptr);
+        }
+      }
     }
   }
   return ret;

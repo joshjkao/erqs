@@ -29,13 +29,21 @@ add_subdirectory(liberqs)
 
 find_package(NLopt)
 
-# executable for testing stuff
+# executable for benchmarking stuff
 add_executable(benchmark benchmark.cpp)
 target_link_libraries(benchmark PRIVATE erqs NLopt::nlopt)
 
 # executable for testing stuff
 add_executable(main main.cpp)
 target_link_libraries(main PRIVATE erqs NLopt::nlopt)
+
+# executable for testing stuff
+add_executable(randomtest_inner randomtest_inner.cpp)
+target_link_libraries(randomtest_inner PRIVATE erqs NLopt::nlopt)
+
+# executable for testing stuff
+add_executable(randomtest_simplify randomtest_simplify.cpp)
+target_link_libraries(randomtest_simplify PRIVATE erqs NLopt::nlopt)
 
 # executable for optimizing
 # add_executable(opt opt.cpp)
