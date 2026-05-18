@@ -15,7 +15,7 @@ add_compile_options(
   -Woverloaded-virtual
   -Wconversion
   -Wsign-conversion
-  -Wnull-dereference
+  # -Wnull-dereference
   -Wformat=2
   $<$<NOT:$<CONFIG:Debug>>:-Werror>
 )
@@ -41,15 +41,15 @@ target_link_libraries(main PRIVATE erqs NLopt::nlopt)
 # add_executable(opt opt.cpp)
 # target_link_libraries(opt PRIVATE erqs NLopt::nlopt)
 
-# # tests
-# include(FetchContent)
-# FetchContent_Declare(
-#     googletest
-#     GIT_REPOSITORY https://github.com/google/googletest.git
-#     GIT_TAG v1.17.0
-# )
-# FetchContent_MakeAvailable(googletest)
-# add_executable(tests tests.cpp)
-# target_link_libraries(tests PRIVATE GTest::gtest_main erqs)
-# include(GoogleTest)
-# gtest_discover_tests(tests)
+# tests
+include(FetchContent)
+FetchContent_Declare(
+    googletest
+    GIT_REPOSITORY https://github.com/google/googletest.git
+    GIT_TAG v1.17.0
+)
+FetchContent_MakeAvailable(googletest)
+add_executable(tests tests.cpp)
+target_link_libraries(tests PRIVATE GTest::gtest_main erqs NLopt::nlopt)
+include(GoogleTest)
+gtest_discover_tests(tests)

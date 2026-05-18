@@ -2,11 +2,7 @@
 #include "quantumstate.h"
 #include <iostream>
 #include <memory>
-#include <type_traits>
 #include <variant>
-
-static bool validate_sum_helper(const std::shared_ptr<SumState> &sum,
-                                const ValidationArgs &args, bool is_root);
 
 bool Validate(const std::shared_ptr<PureState> &pure,
               const ValidationArgs &args) {
@@ -35,7 +31,7 @@ bool Validate(const std::shared_ptr<ProductState> &prod,
   };
 
   for (const auto &sum : prod->states) {
-    if (!validate_sum_helper(sum, args, false))
+    if (!Validate(sum, args))
       ret = false;
   }
 
@@ -62,8 +58,8 @@ bool Validate(const std::shared_ptr<ProductState> &prod,
   return ret;
 }
 
-static bool validate_sum_helper(const std::shared_ptr<SumState> &sum,
-                                const ValidationArgs &args, bool is_root) {
+bool Validate(const std::shared_ptr<SumState> &sum,
+              const ValidationArgs &args) {
   bool ret = true;
   auto handle_error = [&](const std::string &msg) {
     if (args.log_to_stdout)
@@ -83,8 +79,7 @@ static bool validate_sum_helper(const std::shared_ptr<SumState> &sum,
       handle_error("sum states must not be empty");
     } else if (sum->states.size() == 1) {
       if (std::holds_alternative<std::shared_ptr<ProductState>>(
-              sum->states[0]) &&
-          !is_root) {
+              sum->states[0])) {
         handle_error("sum states holding a single product state are redundant");
       }
     }
@@ -104,11 +99,6 @@ static bool validate_sum_helper(const std::shared_ptr<SumState> &sum,
     }
   }
   return ret;
-}
-
-bool Validate(const std::shared_ptr<SumState> &sum,
-              const ValidationArgs &args) {
-  return validate_sum_helper(sum, args, true);
 }
 
 bool Validate(const KetBra &kb, const ValidationArgs &args) {
@@ -159,13 +149,9 @@ bool Validate(const SkewOperator &op, const ValidationArgs &args) {
       }
     }
   }
+  if (args.check_skewop_redundant_pures) {
+    // todo
+  }
 
   return ret;
-}
-
-bool CheckEqual_slow(const std::shared_ptr<SumState> &sum1,
-                     const std::shared_ptr<SumState> &sum2) {
-  auto self_inner_1 = Inner_slow(sum1, sum1);
-  auto inner_12 = Inner_slow(sum1, sum2);
-  return (self_inner_1.real() - inner_12.real()) < 1e-4;
 }

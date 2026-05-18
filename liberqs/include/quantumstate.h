@@ -118,6 +118,11 @@ complex Inner_slow(const std::shared_ptr<SumState> &p1,
                    const std::shared_ptr<SumState> &p2);
 complex Inner_slow(const ptr_variant &p1, const ptr_variant &p2);
 
+bool Equals(const std::shared_ptr<PureState> &p1,
+            const std::shared_ptr<PureState> &p2);
+bool Equals_slow(const std::shared_ptr<SumState> &sum1,
+                 const std::shared_ptr<SumState> &sum2);
+
 // ---- HELPER ALGORITHMS ---- //
 struct Visitor {
   std::function<void(std::shared_ptr<SumState>)> sum_visitor;

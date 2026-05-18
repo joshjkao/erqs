@@ -26,6 +26,3 @@ bool Validate(const std::shared_ptr<ProductState> &prod,
 bool Validate(const std::shared_ptr<SumState> &sum, const ValidationArgs &args);
 bool Validate(const KetBra &kb, const ValidationArgs &args);
 bool Validate(const SkewOperator &op, const ValidationArgs &args);
-
-bool CheckEqual_slow(const std::shared_ptr<SumState> &sum1,
-                     const std::shared_ptr<SumState> &sum2);

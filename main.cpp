@@ -1,11 +1,12 @@
 #include "operations.h"
 #include "optimization.h"
 #include "quantumstate.h"
+#include "validation.h"
 #include <chrono>
 #include <iostream>
 #include <random>
 
-uint64_t time_in_ms(auto func) {
+auto time_in_ms(auto func) {
   auto start = std::chrono::high_resolution_clock::now();
   func();
   auto end = std::chrono::high_resolution_clock::now();
@@ -15,6 +16,7 @@ uint64_t time_in_ms(auto func) {
 }
 
 int main() {
+
   std::random_device rd{};
   std::mt19937 gen{rd()};
   auto root = RandomSumState(4, 2, 2, ~QSpace{0}, gen);
@@ -68,5 +70,5 @@ int main() {
   std::cout << "original\n";
   Print(inner);
 
-  // OptimizeCoefficients(H, root);
+  //   // OptimizeCoefficients(H, root);
 }

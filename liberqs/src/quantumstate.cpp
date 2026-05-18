@@ -10,6 +10,9 @@
 std::shared_ptr<SumState> MakeSum(const std::vector<complex> &coeffs,
                                   const std::vector<ptr_variant> &states) {
   QSpace this_space{0};
+  if (coeffs.size() != states.size()) {
+    throw std::runtime_error("coeffs and states must be the same size");
+  }
   for (auto &state : states) {
     QSpace next_space =
         std::visit([](const auto &e) { return GetSpace(e); }, state);
@@ -371,4 +374,17 @@ std::shared_ptr<PureState> PickRandomPure(std::shared_ptr<SumState> &root,
   std::uniform_int_distribution<size_t> dist(0, pures.size() - 1);
   size_t rand_ind = dist(gen);
   return pures[rand_ind];
+}
+
+bool Equals(const std::shared_ptr<PureState> &p1,
+            const std::shared_ptr<PureState> &p2) {
+  return p1->bits == p2->bits && p1->space == p2->space;
+}
+
+bool Equals_slow(const std::shared_ptr<SumState> &sum1,
+                 const std::shared_ptr<SumState> &sum2) {
+  auto self_inner_1 = Inner_slow(sum1, sum1);
+  auto inner_12 = Inner_slow(sum1, sum2);
+  return std::abs(self_inner_1.real() - inner_12.real()) <
+         1e-4 * self_inner_1.real();
 }

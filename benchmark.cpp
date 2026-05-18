@@ -52,7 +52,7 @@ int main(int argc, char **argv) {
   bool valid_1 = Validate(clone1, ValidationArgs{});
   if (!valid_1)
     std::cout << "removed squashed state is invalid\n";
-  if (!CheckEqual_slow(root, clone1)) {
+  if (!Equals_slow(root, clone1)) {
     std::cout << "error: clone1 doesn't equal root\n";
   }
 
@@ -60,7 +60,7 @@ int main(int argc, char **argv) {
   bool valid_2 = Validate(clone2, ValidationArgs{});
   if (!valid_2)
     std::cout << "removed squashed state is invalid\n";
-  if (!CheckEqual_slow(root, clone2)) {
+  if (!Equals_slow(root, clone2)) {
     std::cout << "error: clone2 doesn't equal root\n";
   }
 

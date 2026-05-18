@@ -2,6 +2,7 @@
 #include "operations.h"
 #include "quantumstate.h"
 // #include <iostream>
+#include <cmath>
 #include <cstddef>
 #include <memory>
 #include <nlopt.hpp>
@@ -204,22 +205,29 @@ static void remove_singles_rec(std::shared_ptr<SumState> &state) {
     remove_singles_rec(var);
   }
   std::vector<ptr_variant> states_new;
-  // dropping a coefficient, technically
-  for (auto var : state->states) {
+  std::vector<complex> coeffs_new;
+  for (auto &&[coeff, var] : std::views::zip(state->coeffs, state->states)) {
     auto var_states = get_states_if_product(var);
     // the variant is a pure state
-    if (var_states.empty())
+    if (var_states.empty()) {
+      coeffs_new.push_back(coeff);
       states_new.push_back(var);
+    }
     // the variant has more than one factor state
-    else if (var_states.size() > 1)
+    else if (var_states.size() > 1) {
+      coeffs_new.push_back(coeff);
       states_new.push_back(var);
+    }
     // the variant is a product state with a single term
     else {
-      for (auto child_var : var_states[0]->states) {
+      for (auto &&[child_coeff, child_var] :
+           std::views::zip(var_states[0]->coeffs, var_states[0]->states)) {
+        coeffs_new.push_back(coeff * child_coeff);
         states_new.push_back(child_var);
       }
     }
   }
+  state->coeffs = coeffs_new;
   state->states = states_new;
 }
 static void remove_singles_rec(std::shared_ptr<ProductState> &state) {
@@ -270,30 +278,21 @@ void RemoveSingles(std::shared_ptr<SumState> &root) {
   }
 }
 
-static complex normalize_rec(std::shared_ptr<PureState>) { return 1.0; }
-static complex normalize_rec(std::shared_ptr<ProductState> state);
-static complex normalize_rec(ptr_variant var) {
-  return std::visit([](auto p) { return normalize_rec(p); }, var);
-}
-static complex normalize_rec(std::shared_ptr<SumState> state) {
-  for (auto &&[c, v] : std::views::zip(state->coeffs, state->states))
-    c *= normalize_rec(v);
-  complex norm2 = 0.0;
-  for (auto c : state->coeffs)
-    norm2 += c * std::conj(c);
-  complex norm = sqrt(norm2.real());
-  for (auto &c : state->coeffs)
-    c /= norm;
-  return norm;
-}
-static complex normalize_rec(std::shared_ptr<ProductState> state) {
-  complex prod = 1.0;
-  for (auto s : state->states) {
-    prod *= normalize_rec(s);
+void Normalize_slow(std::shared_ptr<SumState> &root) {
+  auto self_inner = Inner_slow(root, root);
+  complex norm = std::sqrt(self_inner.real());
+  for (auto &coeff : root->coeffs) {
+    coeff /= norm;
   }
-  return prod;
 }
-void Normalize(std::shared_ptr<SumState> &root) { normalize_rec(root); }
+
+void Normalize(std::shared_ptr<SumState> &root) {
+  auto self_inner = Inner(root, root);
+  complex norm = std::sqrt(self_inner.ketbras[0].coeff.real());
+  for (auto &coeff : root->coeffs) {
+    coeff /= norm;
+  }
+}
 
 // needed to perform compression
 using PureTuple = std::tuple<QSpace, QSpace>;
