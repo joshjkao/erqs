@@ -21,6 +21,18 @@ struct ValidationArgs {
   bool check_skewop_redundant_pures = true;
 };
 
+inline constinit ValidationArgs CHECK_ALL{};
+
+inline constinit ValidationArgs CHECK_ALL_QUIET{.log_to_stdout = false,
+                                                .log_state_on_error = false};
+
+inline constinit ValidationArgs CHECK_CORRECTNESS_ONLY{
+    .check_no_single_prod_states = false,
+    .check_no_single_sum_states = false,
+    .check_redundant_pure_states = false,
+    .check_skewop_redundant_constants = false,
+    .check_skewop_redundant_pures = false};
+
 bool Validate(const std::shared_ptr<PureState> &pure,
               const ValidationArgs &args);
 bool Validate(const std::shared_ptr<ProductState> &prod,
