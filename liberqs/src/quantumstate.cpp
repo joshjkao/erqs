@@ -567,3 +567,39 @@ bool Equals_literal(const std::shared_ptr<SumState> &sum1,
       });
   return coeffs_match;
 }
+
+bool Equals_literal_flat(const std::shared_ptr<SumState> &sum1,
+                         const std::shared_ptr<SumState> &sum2) {
+  std::unordered_map<PureState, complex, PureStateHash> pures1;
+  for (const auto &[coeff, var1] :
+       std::views::zip(sum1->coeffs, sum1->states)) {
+    if (!std::holds_alternative<std::shared_ptr<PureState>>(var1))
+      throw std::runtime_error(
+          "Equals_literal_flat should only be used on flattened states");
+    auto pure1 = std::get<std::shared_ptr<PureState>>(var1);
+    pures1[*pure1] += coeff;
+  }
+  std::unordered_map<PureState, complex, PureStateHash> pures2;
+  for (const auto &[coeff, var2] :
+       std::views::zip(sum2->coeffs, sum2->states)) {
+    if (!std::holds_alternative<std::shared_ptr<PureState>>(var2))
+      throw std::runtime_error(
+          "Equals_literal_flat should only be used on flattened states");
+    auto pure2 = std::get<std::shared_ptr<PureState>>(var2);
+    pures2[*pure2] += coeff;
+  }
+  if (pures1.size() != pures2.size())
+    return false;
+
+  constexpr double epsilon = 1e-5;
+  return std::ranges::all_of(pures1, [&pures2, epsilon](const auto &pair) {
+    const auto &[state, coeff1] = pair;
+    auto it = pures2.find(state);
+    if (it == pures2.end()) {
+      return false; // Key missing in second map
+    }
+    const auto &coeff2 = it->second;
+    return std::abs(coeff1.real() - coeff2.real()) < epsilon &&
+           std::abs(coeff1.imag() - coeff2.imag()) < epsilon;
+  });
+}

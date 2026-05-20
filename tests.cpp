@@ -49,6 +49,13 @@ TEST(Equality, Sum) {
   EXPECT_FALSE(Equals_slow(sum1, sum2));
 }
 
+TEST(Equality, Literal_flat) {
+  auto pure1 = MakePure("1111", "0000");
+  auto pure2 = MakePure("1111", "0000");
+  auto sum1 = MakeSum({complex{2.3, -0.75}, complex{1.2, 4.5}}, {pure1, pure2});
+  EXPECT_TRUE(Equals_literal_flat(sum1, sum1));
+}
+
 TEST(Equality, Literal) {
   auto pure1 = MakePure("1111", "0000");
   auto pure2 = MakePure("1111", "1010");
@@ -101,13 +108,13 @@ TEST(Flatten, Small) {
   auto flat1 = Clone(sum1);
   Flatten(flat1);
   auto flat1_from_str = FromString("[(1.0) 1111 0101]");
-  EXPECT_TRUE(Equals_literal(flat1, flat1_from_str));
+  EXPECT_TRUE(Equals_literal_flat(flat1, flat1_from_str));
 
   auto sum2 = MakeSum({2.4, 5.7}, {pure1, pure2});
   auto flat2 = Clone(sum2);
   Flatten(flat2);
   auto flat_from_str = FromString("[(2.4) 1111 0101 (5.7) 1111 1010]");
-  EXPECT_TRUE(Equals_literal(flat2, flat_from_str));
+  EXPECT_TRUE(Equals_literal_flat(flat2, flat_from_str));
 
   auto pure3 = MakePure("110000", "010000");
   auto pure4 = MakePure("110000", "100000");
@@ -115,14 +122,86 @@ TEST(Flatten, Small) {
   auto prod1 = MakeProduct({sum2, sum3});
   auto pure5 = MakePure("111111", "010101");
   auto sum4 = MakeSum({-10, 3}, {pure5, prod1});
+
   auto flat4 = Clone(sum4);
   Flatten(flat4);
+
   auto flat4_from_str =
-      FromString("[(2.64) 111111 010101 (-2.4) 111111 100101 (-5.7) 111111 "
-                 "101010 (-7.36) 111111 010101]");
-  Print(flat4);
-  Print(flat4_from_str);
-  EXPECT_TRUE(Equals_literal(flat4, flat4_from_str));
+      FromString("[(-2.08) 111111 010101 (-7.2) 111111 100101 "
+                 "(18.81) 111111 011010 (-17.1) 111111 101010]");
+
+  EXPECT_TRUE(Equals_literal_flat(flat4, flat4_from_str));
+}
+
+TEST(Flatten, ComplexCoefficients) {
+  // Subspace 1: the first two qubits
+  auto pure1 = MakePure("1100", "0100");
+
+  // Subspace 2: the last two qubits (disjoint from pure1)
+  auto pure2 = MakePure("0011", "0010");
+
+  // sum1 = (1 + 2i) * pure1
+  auto sum1 = MakeSum({{1.0, 2.0}}, {pure1});
+  // sum2 = (0 - 1i) * pure2
+  auto sum2 = MakeSum({{0.0, -1.0}}, {pure2});
+
+  // Now valid! The spaces "1100" and "0011" are disjoint.
+  auto prod = MakeProduct({sum1, sum2});
+
+  auto root_sum = MakeSum({1.0}, {prod});
+  auto flat = Clone(root_sum);
+  Flatten(flat);
+
+  // Math: 1.0 * (1 + 2i) * (0 - 1i) = 2 - i
+  // Tensor product of spaces "1100" and "0011" -> "1111"
+  // Tensor product of bits "0100" and "0010" -> "0110"
+  auto expected = FromString("[(2.0,-1.0) 1111 0110]");
+
+  EXPECT_TRUE(Equals_literal_flat(flat, expected));
+}
+
+TEST(Flatten, TermCancellation) {
+  // Both pure states share the exact same subspace "111"
+  auto pure1 = MakePure("111", "010");
+  auto pure2 = MakePure("111", "101");
+
+  // Valid: All states in the sum belong to subspace "111"
+  auto root_sum = MakeSum({5.0, 2.0, -5.0, 3.0}, {pure1, pure2, pure1, pure2});
+
+  auto flat = Clone(root_sum);
+  Flatten(flat);
+
+  // pure1 terms perfectly cancel, pure2 terms accumulate to 5.0
+  auto expected = FromString("[ (0.0) 111 010 (5.0) 111 101 ]");
+
+  EXPECT_TRUE(Equals_literal_flat(flat, expected));
+}
+
+TEST(Flatten, DeepNesting) {
+  // Three disjoint subspaces of a 6-bit system
+  auto pure1 = MakePure("110000", "010000"); // Qubits 0, 1
+  auto pure2 = MakePure("001100", "001000"); // Qubits 2, 3
+  auto pure3 = MakePure("000011", "000001"); // Qubits 4, 5
+
+  // Level 1
+  auto inner_sum = MakeSum({4.0}, {pure1});
+
+  // Level 2: pure2 (001100) x pure1 (110000) -> 111100
+  auto middle_prod = MakeProduct({MakeSum({3.0}, {pure2}), inner_sum});
+  auto middle_sum = MakeSum({1.0}, {middle_prod});
+
+  // Level 3: pure3 (000011) x middle (111100) -> 111111
+  auto outer_prod = MakeProduct({MakeSum({2.0}, {pure3}), middle_sum});
+  auto root_sum = MakeSum({1.0}, {outer_prod});
+
+  auto flat = Clone(root_sum);
+  Flatten(flat);
+
+  // Math: 1.0 * (2.0 * (3.0 * 4.0)) = 24.0
+  // Bits combined: 010000 | 001000 | 000001 = 011001
+  auto expected = FromString("[ (24.0) 111111 011001 ]");
+
+  EXPECT_TRUE(Equals_literal_flat(flat, expected));
 }
 
 TEST(FromString, Random) {

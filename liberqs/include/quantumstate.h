@@ -4,7 +4,6 @@
 #include <functional>
 #include <memory>
 #include <random>
-#include <spanstream>
 #include <string_view>
 #include <variant>
 #include <vector>
@@ -129,6 +128,8 @@ bool Equals_slow(const std::shared_ptr<SumState> &sum1,
                  const std::shared_ptr<SumState> &sum2);
 bool Equals_literal(const std::shared_ptr<SumState> &sum1,
                     const std::shared_ptr<SumState> &sum2);
+bool Equals_literal_flat(const std::shared_ptr<SumState> &sum1,
+                         const std::shared_ptr<SumState> &sum2);
 inline bool operator==(const PureState &ps1, const PureState &ps2) {
   return ps1.bits == ps2.bits && ps1.space == ps2.space;
 }
