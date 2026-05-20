@@ -37,20 +37,27 @@ target_link_libraries(benchmark PRIVATE erqs NLopt::nlopt)
 add_executable(main main.cpp)
 target_link_libraries(main PRIVATE erqs NLopt::nlopt)
 
+include(FetchContent)
+FetchContent_Declare(
+  cxxopts
+  GIT_REPOSITORY https://github.com/jarro2783/cxxopts.git
+  GIT_TAG v3.3.1
+)
+FetchContent_MakeAvailable(cxxopts)
+
 # executable for testing stuff
 add_executable(randomtest_inner randomtest_inner.cpp)
-target_link_libraries(randomtest_inner PRIVATE erqs NLopt::nlopt)
+target_link_libraries(randomtest_inner PRIVATE erqs NLopt::nlopt cxxopts::cxxopts)
 
 # executable for testing stuff
 add_executable(randomtest_simplify randomtest_simplify.cpp)
-target_link_libraries(randomtest_simplify PRIVATE erqs NLopt::nlopt)
+target_link_libraries(randomtest_simplify PRIVATE erqs NLopt::nlopt cxxopts::cxxopts)
 
 # executable for optimizing
 # add_executable(opt opt.cpp)
 # target_link_libraries(opt PRIVATE erqs NLopt::nlopt)
 
 # tests
-include(FetchContent)
 FetchContent_Declare(
     googletest
     GIT_REPOSITORY https://github.com/google/googletest.git

@@ -19,6 +19,9 @@ struct ValidationArgs {
 
   bool check_skewop_redundant_constants = true;
   bool check_skewop_redundant_pures = true;
+
+  bool check_pauliop_disjoint = true;
+  bool check_hamiltonian_list_sizes = true;
 };
 
 inline constinit ValidationArgs CHECK_ALL{};
@@ -40,3 +43,5 @@ bool Validate(const std::shared_ptr<ProductState> &prod,
 bool Validate(const std::shared_ptr<SumState> &sum, const ValidationArgs &args);
 bool Validate(const KetBra &kb, const ValidationArgs &args);
 bool Validate(const SkewOperator &op, const ValidationArgs &args);
+bool Validate(const PauliOperator &p, const ValidationArgs &args);
+bool Validate(const PauliHamiltonian &h, const ValidationArgs &args);

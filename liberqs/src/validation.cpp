@@ -73,19 +73,16 @@ bool Validate(const std::shared_ptr<ProductState> &prod,
 struct PureStateHash {
   std::size_t operator()(const PureState &t) const {
     std::size_t seed = 0;
-
     // Boost's hash_combine algorithm
     auto hash_combine = [&seed](std::size_t hash_value) {
       seed ^= hash_value + 0x9e3779b9 + (seed << 6) + (seed >> 2);
     };
-
     // 2. Hash the four std::bitset<N> elements
     std::hash<BitString> bitset_hasher;
     // hash_combine(bitset_hasher(std::get<0>(t)));
     // hash_combine(bitset_hasher(std::get<1>(t)));
     hash_combine(bitset_hasher(t.space));
     hash_combine(bitset_hasher(t.bits));
-
     return seed;
   }
 };
@@ -202,6 +199,46 @@ bool Validate(const SkewOperator &op, const ValidationArgs &args) {
   }
   if (args.check_skewop_redundant_pures) {
     // todo
+  }
+
+  return ret;
+}
+
+bool Validate(const PauliOperator &op, const ValidationArgs &args) {
+  bool ret = true;
+  auto handle_error = [&](const std::string &msg) {
+    if (args.log_to_stdout)
+      std::cout << msg << "\n";
+    ret = false;
+  };
+
+  if (args.check_pauliop_disjoint) {
+    if ((op.x & op.y).any() || (op.x & op.z).any() || (op.y & op.z).any()) {
+      handle_error("pauli operators must be disjoint");
+    }
+  }
+
+  return ret;
+}
+
+bool Validate(const PauliHamiltonian &h, const ValidationArgs &args) {
+  bool ret = true;
+  auto handle_error = [&](const std::string &msg) {
+    if (args.log_to_stdout)
+      std::cout << msg << "\n";
+    ret = false;
+  };
+
+  for (const auto &op : h.operators) {
+    if (!Validate(op, args))
+      ret = false;
+  }
+
+  if (args.check_hamiltonian_list_sizes) {
+    if (h.coeffs.size() != h.operators.size()) {
+      handle_error("hamiltonians must have an equal number of coefficients and "
+                   "operators");
+    }
   }
 
   return ret;

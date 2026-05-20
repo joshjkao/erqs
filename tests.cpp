@@ -135,6 +135,32 @@ TEST(Validate, Skewop_Redundant_Pures) {
   // todo
 }
 
+TEST(Validate, PauliOp) {
+  PauliOperator op1{
+      .x = BitString{"1000"}, .y = BitString{"0110"}, .z = BitString{"0001"}};
+  EXPECT_TRUE(Validate(op1, CHECK_ALL));
+  PauliOperator op2{
+      .x = BitString{"1100"}, .y = BitString{"0110"}, .z = BitString{"0001"}};
+  EXPECT_FALSE(Validate(op2, CHECK_ALL_QUIET));
+}
+
+TEST(Validate, Hamiltonian) {
+  std::vector<double> coeffs{1, 2};
+  std::vector<PauliOperator> ops{PauliOperator{
+      .x = BitString{"0000"}, .y = BitString{"0000"}, .z = BitString{"0000"}}};
+  PauliHamiltonian h1{coeffs, ops};
+  EXPECT_FALSE(Validate(h1, CHECK_ALL_QUIET));
+  ops.push_back(PauliOperator{
+      .x = BitString{"1111"}, .y = BitString{"1111"}, .z = BitString{"1111"}});
+  PauliHamiltonian h2{coeffs, ops};
+  EXPECT_FALSE(Validate(h2, CHECK_ALL_QUIET));
+  ops.pop_back();
+  ops.push_back(PauliOperator{
+      .x = BitString{"0000"}, .y = BitString{"0001"}, .z = BitString{"1110"}});
+  PauliHamiltonian h3{coeffs, ops};
+  EXPECT_TRUE(Validate(h3, CHECK_ALL));
+}
+
 // We know this is broken, but we should just use Simplify instead
 // TEST(RemoveSingles, BasicSum) {
 //   auto pure1 = MakePure("1111", "1111");
@@ -186,4 +212,15 @@ TEST(Simplify, Sum) {
   auto root_simple = Simplify(root);
   EXPECT_TRUE(Validate(root_simple, ValidationArgs{}));
   EXPECT_TRUE(Equals_slow(root, root_simple));
+}
+
+TEST(Inner, Slow) {
+  auto pure1 = MakePure("00001111", "00001111");
+  auto pure2 = MakePure("00001111", "00000111");
+  auto sum1 = MakeSum({0.4, 10.1}, {pure1, pure2});
+  auto sum2 = MakeSum({0.4, 10.1}, {pure1, pure2});
+  EXPECT_EQ(Inner_slow(sum1, sum2), 0.4 * 0.4 + 10.1 * 10.1);
+  auto sum3 = MakeSum({0.4, 10.1}, {pure1, pure1});
+  auto sum4 = MakeSum({0.4, 10.1}, {pure1, pure1});
+  EXPECT_EQ(Inner_slow(sum3, sum4), (0.4 + 10.1) * (0.4 + 10.1));
 }

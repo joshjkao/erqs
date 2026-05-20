@@ -6,6 +6,7 @@
 #include <random>
 #include <ranges>
 #include <string>
+#include <unordered_map>
 
 std::shared_ptr<SumState> MakeSum(const std::vector<complex> &coeffs,
                                   const std::vector<ptr_variant> &states) {
@@ -134,6 +135,19 @@ std::ostream &operator<<(std::ostream &os, const KetBra &kb) {
   return os;
 }
 
+// needed to perform compression
+struct PureStateHash {
+  std::size_t operator()(const PureState &t) const {
+    std::size_t seed = 0;
+    auto hash_combine = [&seed](std::size_t hash_value) {
+      seed ^= hash_value + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+    };
+    std::hash<BitString> bitset_hasher;
+    hash_combine(bitset_hasher(t.space));
+    hash_combine(bitset_hasher(t.bits));
+    return seed;
+  }
+};
 static std::vector<std::pair<complex, PureState>>
 flatten_helper(std::shared_ptr<PureState> &pure_ptr) {
   return {{1.0, *pure_ptr}};
@@ -142,6 +156,7 @@ static std::vector<std::pair<complex, PureState>>
 flatten_helper(std::shared_ptr<ProductState> &prod_ptr);
 static std::vector<std::pair<complex, PureState>>
 flatten_helper(std::shared_ptr<SumState> &sum_ptr) {
+  std::unordered_map<PureState, complex, PureStateHash> map;
   std::vector<std::pair<complex, PureState>> ret;
   for (auto &&[c1, s1] :
        std::views::zip((*sum_ptr).coeffs, (*sum_ptr).states)) {
@@ -175,18 +190,23 @@ static std::vector<std::pair<complex, PureState>>
 flatten_helper(std::shared_ptr<ProductState> &prod_ptr) {
   return flatten_prod_helper(prod_ptr);
 }
-
 void Flatten(std::shared_ptr<SumState> &root) {
   auto flat = flatten_helper(root);
+  std::unordered_map<PureState, complex, PureStateHash> map;
+  for (auto &[coeff, state] : flat) {
+    map[state] += coeff;
+  }
   root->coeffs.clear();
   root->states.clear();
-  for (auto &[c, s] : flat) {
-    root->coeffs.push_back(c);
-    root->states.push_back(std::make_shared<PureState>(s));
+  for (auto &[state, coeff] : map) {
+    root->coeffs.push_back(coeff);
+    root->states.push_back(std::make_shared<PureState>(state));
   }
   // will error if empty
+  assert(!flat.empty());
   root->space = flat[0].second.space;
 }
+
 complex Inner_slow(const ptr_variant &p1, const ptr_variant &p2) {
   auto clone1 = std::visit([](auto &p) { return rclone(p); }, p1);
   auto clone2 = std::visit([](auto &p) { return rclone(p); }, p2);
