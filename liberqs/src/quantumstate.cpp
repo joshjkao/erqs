@@ -2,11 +2,13 @@
 #include <cassert>
 #include <functional>
 #include <iostream>
+#include <memory>
 #include <nlopt.hpp>
 #include <random>
 #include <ranges>
 #include <string>
 #include <unordered_map>
+#include <variant>
 
 std::shared_ptr<SumState> MakeSum(const std::vector<complex> &coeffs,
                                   const std::vector<ptr_variant> &states) {
@@ -226,12 +228,20 @@ complex Inner_slow(const std::shared_ptr<SumState> &p1,
   auto clone1 = Clone(p1);
   auto clone2 = Clone(p2);
   auto flat1 = flatten_helper(clone1);
+  std::unordered_map<PureState, complex, PureStateHash> map1;
+  for (const auto &[c, s] : flat1) {
+    map1[s] += c;
+  }
   auto flat2 = flatten_helper(clone2);
+  std::unordered_map<PureState, complex, PureStateHash> map2;
+  for (const auto &[c, s] : flat2) {
+    map2[s] += c;
+  }
   complex ret = 0.0;
-  for (const auto &[c1, s1] : flat1) {
-    for (const auto &[c2, s2] : flat2) {
-      if (s1.bits == s2.bits && s1.space == s2.space)
-        ret += std::conj(c1) * c2;
+  for (const auto &[s, c] : map2) {
+    auto it = map1.find(s);
+    if (it != map1.end()) {
+      ret += std::conj(it->second) * c;
     }
   }
   return ret;

@@ -2,6 +2,7 @@
 #include "quantumstate.h"
 #include "validation.h"
 #include <gtest/gtest.h>
+#include <random>
 
 TEST(Factories, MakeSum) {
   auto pure1 = MakePure("0111", "0000");
@@ -214,6 +215,14 @@ TEST(Simplify, Sum) {
   EXPECT_TRUE(Equals_slow(root, root_simple));
 }
 
+TEST(Simplify, BigTree) {
+  std::random_device rd{};
+  std::mt19937 gen(rd());
+  auto rand1 = RandomSumState(7, 7, 7, ~QSpace{0}, gen);
+  auto simp1 = Simplify(rand1);
+  EXPECT_TRUE(Validate(simp1, CHECK_ALL));
+}
+
 TEST(Inner, Slow) {
   auto pure1 = MakePure("00001111", "00001111");
   auto pure2 = MakePure("00001111", "00000111");
@@ -222,5 +231,5 @@ TEST(Inner, Slow) {
   EXPECT_EQ(Inner_slow(sum1, sum2), 0.4 * 0.4 + 10.1 * 10.1);
   auto sum3 = MakeSum({0.4, 10.1}, {pure1, pure1});
   auto sum4 = MakeSum({0.4, 10.1}, {pure1, pure1});
-  EXPECT_EQ(Inner_slow(sum3, sum4), (0.4 + 10.1) * (0.4 + 10.1));
+  EXPECT_EQ(Inner_slow(sum3, sum4).real(), (0.4 + 10.1) * (0.4 + 10.1));
 }
