@@ -49,6 +49,93 @@ TEST(Equality, Sum) {
   EXPECT_FALSE(Equals_slow(sum1, sum2));
 }
 
+TEST(Equality, Literal) {
+  auto pure1 = MakePure("1111", "0000");
+  auto pure2 = MakePure("1111", "1010");
+  auto sum1 = MakeSum({1}, {pure1});
+  auto sum2 = MakeSum({1}, {pure1});
+  EXPECT_TRUE(Equals_literal(sum1, sum2));
+  auto sum3 = MakeSum({2}, {pure1});
+  EXPECT_FALSE(Equals_literal(sum1, sum3));
+  auto sum4 = MakeSum({1, 2, 3}, {pure1, pure1, pure2});
+  EXPECT_FALSE(Equals_literal(sum1, sum4));
+  auto sum5 = MakeSum({1}, {pure2});
+  EXPECT_FALSE(Equals_literal(sum1, sum5));
+
+  std::random_device rd{};
+  std::mt19937 gen{rd()};
+  auto rand1 = RandomSumState(7, 7, 7, ~QSpace{0}, gen);
+  auto rand2 = Clone(rand1);
+  EXPECT_TRUE(Equals_literal(rand1, rand2));
+}
+
+TEST(FromString, Small) {
+  auto pure1 = MakePure("1111", "0101");
+  auto pure2 = MakePure("1111", "1010");
+  auto sum1 = MakeSum({1.0}, {pure1});
+  auto from_str = FromString("[(1.0) 1111 0101]");
+  EXPECT_TRUE(Equals_literal(sum1, from_str));
+  auto sum2 = MakeSum({2.4, 5.7}, {pure1, pure2});
+  auto from_str2 = FromString("[(2.4) 1111 0101 (5.7) 1111 1010]");
+  EXPECT_TRUE(Equals_literal(sum2, from_str2));
+  auto pure3 = MakePure("110000", "010000");
+  auto pure4 = MakePure("110000", "100000");
+  auto sum3 = MakeSum({1.1, -1.0}, {pure3, pure4});
+  auto prod1 = MakeProduct({sum2, sum3});
+  auto pure5 = MakePure("111111", "010101");
+  auto sum4 = MakeSum({-10, 3}, {pure5, prod1});
+  auto from_str3 =
+      FromString("[(-10) 111111 010101 (3) {[(2.4) 1111 0101 (5.7) 1111 1010] "
+                 "[(1.1) 110000 010000 (1) 110000 100000]}]");
+  auto from_str4 =
+      FromString("[(-10) 111111 010101 (3) {[(2.4) 1111 0101 (5.7) 1111 1010] "
+                 "[(1.1) 110000 010000 (-1) 110000 100000]}]");
+  EXPECT_FALSE(Equals_literal(sum4, from_str3));
+  EXPECT_TRUE(Equals_literal(sum4, from_str4));
+}
+
+TEST(Flatten, Small) {
+  auto pure1 = MakePure("1111", "0101");
+  auto pure2 = MakePure("1111", "1010");
+  auto sum1 = MakeSum({1.0}, {pure1});
+  auto flat1 = Clone(sum1);
+  Flatten(flat1);
+  auto flat1_from_str = FromString("[(1.0) 1111 0101]");
+  EXPECT_TRUE(Equals_literal(flat1, flat1_from_str));
+
+  auto sum2 = MakeSum({2.4, 5.7}, {pure1, pure2});
+  auto flat2 = Clone(sum2);
+  Flatten(flat2);
+  auto flat_from_str = FromString("[(2.4) 1111 0101 (5.7) 1111 1010]");
+  EXPECT_TRUE(Equals_literal(flat2, flat_from_str));
+
+  auto pure3 = MakePure("110000", "010000");
+  auto pure4 = MakePure("110000", "100000");
+  auto sum3 = MakeSum({1.1, -1.0}, {pure3, pure4});
+  auto prod1 = MakeProduct({sum2, sum3});
+  auto pure5 = MakePure("111111", "010101");
+  auto sum4 = MakeSum({-10, 3}, {pure5, prod1});
+  auto flat4 = Clone(sum4);
+  Flatten(flat4);
+  auto flat4_from_str =
+      FromString("[(2.64) 111111 010101 (-2.4) 111111 100101 (-5.7) 111111 "
+                 "101010 (-7.36) 111111 010101]");
+  Print(flat4);
+  Print(flat4_from_str);
+  EXPECT_TRUE(Equals_literal(flat4, flat4_from_str));
+}
+
+TEST(FromString, Random) {
+  std::random_device rd{};
+  std::mt19937 gen{rd()};
+  auto rand1 = RandomSumState(7, 7, 7, ~QSpace{0}, gen);
+  std::string str = Stringify(rand1);
+  auto clone = FromString(str);
+  std::string strcpy = Stringify(clone);
+  EXPECT_EQ(str, strcpy);
+  EXPECT_TRUE(Equals_literal(rand1, clone));
+}
+
 TEST(Validate, Pure_Support) {
   auto pure1 = MakePure("1111", "0000");
   auto pure2 = MakePure("0000", "0000");
@@ -220,7 +307,7 @@ TEST(Simplify, BigTree) {
   std::mt19937 gen(rd());
   auto rand1 = RandomSumState(7, 7, 7, ~QSpace{0}, gen);
   auto simp1 = Simplify(rand1);
-  EXPECT_TRUE(Validate(simp1, CHECK_ALL));
+  EXPECT_TRUE(Validate(simp1, CHECK_ALL_QUIET));
 }
 
 TEST(Inner, Slow) {

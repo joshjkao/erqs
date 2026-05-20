@@ -4,6 +4,8 @@
 #include <functional>
 #include <memory>
 #include <random>
+#include <spanstream>
+#include <string_view>
 #include <variant>
 #include <vector>
 
@@ -69,6 +71,8 @@ std::shared_ptr<SumState> MakeSum(const std::vector<complex> &coeffs,
 std::shared_ptr<ProductState>
 MakeProduct(const std::vector<std::shared_ptr<SumState>> &states);
 
+std::shared_ptr<SumState> FromString(std::string_view str);
+
 std::shared_ptr<SumState> Clone(const std::shared_ptr<SumState> &root);
 
 ptr_variant RandomProductState(size_t max_depth, size_t n_terms,
@@ -112,6 +116,7 @@ void Print(const ptr_variant &ptr, size_t indent = 0);
 void Print(const KetBra &kb);
 void Print(const SkewOperator &op);
 std::ostream &operator<<(std::ostream &os, const KetBra &kb);
+std::string Stringify(const std::shared_ptr<SumState> &state);
 
 void Flatten(std::shared_ptr<SumState> &root);
 complex Inner_slow(const std::shared_ptr<SumState> &p1,
@@ -122,6 +127,8 @@ bool Equals(const std::shared_ptr<PureState> &p1,
             const std::shared_ptr<PureState> &p2);
 bool Equals_slow(const std::shared_ptr<SumState> &sum1,
                  const std::shared_ptr<SumState> &sum2);
+bool Equals_literal(const std::shared_ptr<SumState> &sum1,
+                    const std::shared_ptr<SumState> &sum2);
 inline bool operator==(const PureState &ps1, const PureState &ps2) {
   return ps1.bits == ps2.bits && ps1.space == ps2.space;
 }

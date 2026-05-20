@@ -1,4 +1,5 @@
 #include "quantumstate.h"
+#include <algorithm>
 #include <cassert>
 #include <functional>
 #include <iostream>
@@ -6,7 +7,11 @@
 #include <nlopt.hpp>
 #include <random>
 #include <ranges>
+#include <spanstream>
+#include <sstream>
+#include <stdexcept>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <variant>
 
@@ -65,6 +70,100 @@ static std::shared_ptr<SumState> rclone(const std::shared_ptr<SumState> &sum) {
 }
 std::shared_ptr<SumState> Clone(const std::shared_ptr<SumState> &root) {
   return rclone(root);
+}
+
+static void skip_whitespace(std::string_view &sv) {
+  auto first = sv.find_first_not_of(" \t\n\r");
+  if (first != std::string_view::npos) {
+    sv.remove_prefix(first);
+  }
+}
+void sync_with_stream(std::string_view &view, std::ispanstream &iss) {
+  auto pos = iss.tellg();
+  if (pos == std::streampos(-1)) {
+    throw std::runtime_error("Stream parsing failed: invalid position.");
+  }
+  view.remove_prefix(static_cast<std::size_t>(pos));
+}
+
+// 1. Pass by reference!
+static std::pair<complex, ptr_variant>
+parse_helper_var(std::string_view &input);
+
+static std::shared_ptr<SumState> parse_helper_sum(std::string_view &input) {
+  skip_whitespace(input);
+  if (input.empty() || input.front() != '[') {
+    throw std::runtime_error("parse_helper_sum: expected '['");
+  }
+  input.remove_prefix(1); // Consume '['
+
+  std::vector<complex> coeffs;
+  std::vector<ptr_variant> vars;
+
+  // 4. Safely handle whitespace before the closing bracket
+  while (true) {
+    skip_whitespace(input);
+    if (input.empty() || input.front() == ']') {
+      break;
+    }
+
+    auto [coeff, var] = parse_helper_var(input);
+    coeffs.push_back(coeff);
+    vars.push_back(var);
+  }
+
+  if (input.empty() || input.front() != ']') {
+    throw std::runtime_error("parse_helper_sum: expected ']'");
+  }
+  input.remove_prefix(1); // Consume ']'
+  return MakeSum(coeffs, vars);
+}
+
+static std::pair<complex, ptr_variant>
+parse_helper_var(std::string_view &input) {
+  skip_whitespace(input);
+  if (input.empty() || input.front() != '(') {
+    throw std::runtime_error("parse_helper_var: expected '('");
+  }
+
+  std::ispanstream iss{input};
+  complex c;
+  iss >> c >> std::ws;
+
+  if (iss.peek() == '{') {
+    sync_with_stream(input, iss);
+
+    // 3. Consume the '{' so the next parser doesn't choke on it
+    input.remove_prefix(1);
+
+    std::vector<std::shared_ptr<SumState>> states;
+    while (true) {
+      skip_whitespace(input);
+      if (input.empty() || input.front() == '}') {
+        break;
+      }
+      states.push_back(parse_helper_sum(input));
+    }
+
+    if (input.empty() || input.front() != '}') {
+      throw std::runtime_error("parse_helper_var: expected '}'");
+    }
+    input.remove_prefix(1); // Consume '}'
+    return {c, MakeProduct(states)};
+
+  } else {
+    QSpace space;
+    BitString bits;
+    iss >> space >> bits;
+
+    // 2. Sync the stream for leaf nodes too!
+    sync_with_stream(input, iss);
+
+    return {c, MakePure(space, bits)};
+  }
+}
+std::shared_ptr<SumState> FromString(std::string_view input) {
+  return parse_helper_sum(input);
 }
 
 static std::string get_indentation(size_t indent) {
@@ -135,6 +234,11 @@ void Print(const SkewOperator &op) { PrintToStream(std::cout, op); }
 std::ostream &operator<<(std::ostream &os, const KetBra &kb) {
   PrintToStream(os, kb);
   return os;
+}
+std::string Stringify(const std::shared_ptr<SumState> &state) {
+  std::stringstream ss{};
+  PrintToStream(ss, state);
+  return ss.str();
 }
 
 // needed to perform compression
@@ -417,4 +521,49 @@ bool Equals_slow(const std::shared_ptr<SumState> &sum1,
   auto inner_12 = Inner_slow(sum1, sum2);
   return std::abs(self_inner_1.real() - inner_12.real()) <
          1e-4 * self_inner_1.real();
+}
+
+static bool equals_literal_rec(const ptr_variant &var1,
+                               const ptr_variant &var2) {
+  using pureptr = std::shared_ptr<PureState>;
+  using prodptr = std::shared_ptr<ProductState>;
+  if (std::holds_alternative<pureptr>(var1) &&
+      std::holds_alternative<pureptr>(var2)) {
+    auto pure1 = std::get<pureptr>(var1);
+    auto pure2 = std::get<pureptr>(var2);
+    return *pure1 == *pure2;
+  } else if (std::holds_alternative<prodptr>(var1) &&
+             std::holds_alternative<prodptr>(var2)) {
+    auto prod1 = std::get<prodptr>(var1);
+    auto prod2 = std::get<prodptr>(var2);
+    if (prod1->states.size() != prod2->states.size())
+      return false;
+    for (const auto &&[sum1, sum2] :
+         std::views::zip(prod1->states, prod2->states)) {
+      if (!Equals_literal(sum1, sum2))
+        return false;
+    }
+    return true;
+  } else {
+    return false;
+  }
+}
+bool Equals_literal(const std::shared_ptr<SumState> &sum1,
+                    const std::shared_ptr<SumState> &sum2) {
+  if (sum1->states.size() != sum2->states.size())
+    return false;
+  for (const auto &&[var1, var2] :
+       std::views::zip(sum1->states, sum2->states)) {
+    if (!equals_literal_rec(var1, var2))
+      return false;
+  }
+  // this is needed to make it easier to compare stringified expressions to
+  // string-parsed expressions
+  constexpr double epsilon = 1e-5; // Adjust based on your ostream precision
+  bool coeffs_match = std::ranges::equal(
+      sum1->coeffs, sum2->coeffs, [](const complex &a, const complex &b) {
+        return std::abs(a.real() - b.real()) < epsilon &&
+               std::abs(a.imag() - b.imag()) < epsilon;
+      });
+  return coeffs_match;
 }
