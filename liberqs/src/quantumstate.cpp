@@ -1,15 +1,26 @@
 #include "quantumstate.h"
+#include <algorithm>
 #include <cassert>
 #include <functional>
 #include <iostream>
+#include <memory>
 #include <nlopt.hpp>
 #include <random>
 #include <ranges>
+#include <spanstream>
+#include <sstream>
+#include <stdexcept>
 #include <string>
+#include <string_view>
+#include <unordered_map>
+#include <variant>
 
 std::shared_ptr<SumState> MakeSum(const std::vector<complex> &coeffs,
                                   const std::vector<ptr_variant> &states) {
   QSpace this_space{0};
+  if (coeffs.size() != states.size()) {
+    throw std::runtime_error("coeffs and states must be the same size");
+  }
   for (auto &state : states) {
     QSpace next_space =
         std::visit([](const auto &e) { return GetSpace(e); }, state);
@@ -59,6 +70,100 @@ static std::shared_ptr<SumState> rclone(const std::shared_ptr<SumState> &sum) {
 }
 std::shared_ptr<SumState> Clone(const std::shared_ptr<SumState> &root) {
   return rclone(root);
+}
+
+static void skip_whitespace(std::string_view &sv) {
+  auto first = sv.find_first_not_of(" \t\n\r");
+  if (first != std::string_view::npos) {
+    sv.remove_prefix(first);
+  }
+}
+void sync_with_stream(std::string_view &view, std::ispanstream &iss) {
+  auto pos = iss.tellg();
+  if (pos == std::streampos(-1)) {
+    throw std::runtime_error("Stream parsing failed: invalid position.");
+  }
+  view.remove_prefix(static_cast<std::size_t>(pos));
+}
+
+// 1. Pass by reference!
+static std::pair<complex, ptr_variant>
+parse_helper_var(std::string_view &input);
+
+static std::shared_ptr<SumState> parse_helper_sum(std::string_view &input) {
+  skip_whitespace(input);
+  if (input.empty() || input.front() != '[') {
+    throw std::runtime_error("parse_helper_sum: expected '['");
+  }
+  input.remove_prefix(1); // Consume '['
+
+  std::vector<complex> coeffs;
+  std::vector<ptr_variant> vars;
+
+  // 4. Safely handle whitespace before the closing bracket
+  while (true) {
+    skip_whitespace(input);
+    if (input.empty() || input.front() == ']') {
+      break;
+    }
+
+    auto [coeff, var] = parse_helper_var(input);
+    coeffs.push_back(coeff);
+    vars.push_back(var);
+  }
+
+  if (input.empty() || input.front() != ']') {
+    throw std::runtime_error("parse_helper_sum: expected ']'");
+  }
+  input.remove_prefix(1); // Consume ']'
+  return MakeSum(coeffs, vars);
+}
+
+static std::pair<complex, ptr_variant>
+parse_helper_var(std::string_view &input) {
+  skip_whitespace(input);
+  if (input.empty() || input.front() != '(') {
+    throw std::runtime_error("parse_helper_var: expected '('");
+  }
+
+  std::ispanstream iss{input};
+  complex c;
+  iss >> c >> std::ws;
+
+  if (iss.peek() == '{') {
+    sync_with_stream(input, iss);
+
+    // 3. Consume the '{' so the next parser doesn't choke on it
+    input.remove_prefix(1);
+
+    std::vector<std::shared_ptr<SumState>> states;
+    while (true) {
+      skip_whitespace(input);
+      if (input.empty() || input.front() == '}') {
+        break;
+      }
+      states.push_back(parse_helper_sum(input));
+    }
+
+    if (input.empty() || input.front() != '}') {
+      throw std::runtime_error("parse_helper_var: expected '}'");
+    }
+    input.remove_prefix(1); // Consume '}'
+    return {c, MakeProduct(states)};
+
+  } else {
+    QSpace space;
+    BitString bits;
+    iss >> space >> bits;
+
+    // 2. Sync the stream for leaf nodes too!
+    sync_with_stream(input, iss);
+
+    return {c, MakePure(space, bits)};
+  }
+}
+std::shared_ptr<SumState> FromString(std::string_view input) {
+  return parse_helper_sum(input);
 }
 
 static std::string get_indentation(size_t indent) {
@@ -130,7 +235,25 @@ std::ostream &operator<<(std::ostream &os, const KetBra &kb) {
   PrintToStream(os, kb);
   return os;
 }
+std::string Stringify(const std::shared_ptr<SumState> &state) {
+  std::stringstream ss{};
+  PrintToStream(ss, state);
+  return ss.str();
+}
 
+// needed to perform compression
+struct PureStateHash {
+  std::size_t operator()(const PureState &t) const {
+    std::size_t seed = 0;
+    auto hash_combine = [&seed](std::size_t hash_value) {
+      seed ^= hash_value + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+    };
+    std::hash<BitString> bitset_hasher;
+    hash_combine(bitset_hasher(t.space));
+    hash_combine(bitset_hasher(t.bits));
+    return seed;
+  }
+};
 static std::vector<std::pair<complex, PureState>>
 flatten_helper(std::shared_ptr<PureState> &pure_ptr) {
   return {{1.0, *pure_ptr}};
@@ -139,6 +262,7 @@ static std::vector<std::pair<complex, PureState>>
 flatten_helper(std::shared_ptr<ProductState> &prod_ptr);
 static std::vector<std::pair<complex, PureState>>
 flatten_helper(std::shared_ptr<SumState> &sum_ptr) {
+  std::unordered_map<PureState, complex, PureStateHash> map;
   std::vector<std::pair<complex, PureState>> ret;
   for (auto &&[c1, s1] :
        std::views::zip((*sum_ptr).coeffs, (*sum_ptr).states)) {
@@ -172,18 +296,23 @@ static std::vector<std::pair<complex, PureState>>
 flatten_helper(std::shared_ptr<ProductState> &prod_ptr) {
   return flatten_prod_helper(prod_ptr);
 }
-
 void Flatten(std::shared_ptr<SumState> &root) {
   auto flat = flatten_helper(root);
+  std::unordered_map<PureState, complex, PureStateHash> map;
+  for (auto &[coeff, state] : flat) {
+    map[state] += coeff;
+  }
   root->coeffs.clear();
   root->states.clear();
-  for (auto &[c, s] : flat) {
-    root->coeffs.push_back(c);
-    root->states.push_back(std::make_shared<PureState>(s));
+  for (auto &[state, coeff] : map) {
+    root->coeffs.push_back(coeff);
+    root->states.push_back(std::make_shared<PureState>(state));
   }
   // will error if empty
+  assert(!flat.empty());
   root->space = flat[0].second.space;
 }
+
 complex Inner_slow(const ptr_variant &p1, const ptr_variant &p2) {
   auto clone1 = std::visit([](auto &p) { return rclone(p); }, p1);
   auto clone2 = std::visit([](auto &p) { return rclone(p); }, p2);
@@ -203,88 +332,23 @@ complex Inner_slow(const std::shared_ptr<SumState> &p1,
   auto clone1 = Clone(p1);
   auto clone2 = Clone(p2);
   auto flat1 = flatten_helper(clone1);
+  std::unordered_map<PureState, complex, PureStateHash> map1;
+  for (const auto &[c, s] : flat1) {
+    map1[s] += c;
+  }
   auto flat2 = flatten_helper(clone2);
+  std::unordered_map<PureState, complex, PureStateHash> map2;
+  for (const auto &[c, s] : flat2) {
+    map2[s] += c;
+  }
   complex ret = 0.0;
-  for (const auto &[c1, s1] : flat1) {
-    for (const auto &[c2, s2] : flat2) {
-      if (s1.bits == s2.bits && s1.space == s2.space)
-        ret += std::conj(c1) * c2;
+  for (const auto &[s, c] : map2) {
+    auto it = map1.find(s);
+    if (it != map1.end()) {
+      ret += std::conj(it->second) * c;
     }
   }
   return ret;
-}
-
-bool Equals(const PureState &sum1, const PureState &sum2) {
-  return sum1.space == sum2.space && sum1.bits == sum2.bits;
-}
-bool Equals(const ProductState &prod1, const ProductState &prod2) {
-  auto ptr_temp1 = std::make_shared<ProductState>(prod1);
-  auto ptr_temp2 = std::make_shared<ProductState>(prod2);
-  auto sum1 = MakeSum({1}, {ptr_temp1});
-  auto sum2 = MakeSum({1}, {ptr_temp2});
-  return Equals(*sum1, *sum2);
-}
-bool Equals(const SumState &sum1, const SumState &sum2) {
-  auto ptr_temp1 = std::make_shared<SumState>(sum1);
-  auto ptr_temp2 = std::make_shared<SumState>(sum2);
-  Flatten(ptr_temp1);
-  Flatten(ptr_temp2);
-  double norm1 = 0.0;
-  for (auto &c1 : ptr_temp1->coeffs) {
-    norm1 += std::real(c1 * std::conj(c1));
-  }
-  norm1 = std::sqrt(norm1);
-  for (auto &c1 : ptr_temp1->coeffs) {
-    c1 /= norm1;
-  }
-  double norm2 = 0.0;
-  for (auto &c2 : ptr_temp2->coeffs) {
-    norm2 += std::real(c2 * std::conj(c2));
-  }
-  norm2 = std::sqrt(norm2);
-  for (auto &c2 : ptr_temp2->coeffs) {
-    c2 /= norm2;
-  }
-  complex inner = Inner_slow(ptr_temp1, ptr_temp2);
-  // floating point error here
-  // there's probably a less janky way to do this
-  return norm1 == norm2 && (std::real(inner) - 1.0) < 0.0001;
-}
-bool Equals(const ProductState &prod1, const PureState &pure2) {
-  auto ptr_temp1 = std::make_shared<ProductState>(prod1);
-  auto ptr_temp2 = std::make_shared<PureState>(pure2);
-  auto sum1 = MakeSum({1}, {ptr_temp1});
-  auto sum2 = MakeSum({1}, {ptr_temp2});
-  return Equals(*sum1, *sum2);
-}
-bool Equals(const PureState &pure1, const ProductState &prod2) {
-  auto ptr_temp1 = std::make_shared<PureState>(pure1);
-  auto ptr_temp2 = std::make_shared<ProductState>(prod2);
-  auto sum1 = MakeSum({1}, {ptr_temp1});
-  auto sum2 = MakeSum({1}, {ptr_temp2});
-  return Equals(*sum1, *sum2);
-}
-bool Equals(const KetBra &kb1, const KetBra &kb2) {
-  // just check if they have the same ket/bra states
-  bool ket_equal = std::visit(
-      [](const auto &k1, const auto &k2) { return Equals(*k1, *k2); }, kb1.ket,
-      kb2.ket);
-  bool bra_equal = std::visit(
-      [](const auto &b1, const auto &b2) { return Equals(*b1, *b2); }, kb1.bra,
-      kb2.bra);
-  return ket_equal && bra_equal && kb1.coeff == kb2.coeff;
-}
-bool operator==(const PureState &pure1, const PureState &pure2) {
-  return Equals(pure1, pure2);
-}
-bool operator==(const SumState &sum1, const SumState &sum2) {
-  return Equals(sum1, sum2);
-}
-bool operator==(const ProductState &prod1, const ProductState &prod2) {
-  return Equals(prod1, prod2);
-}
-bool operator==(const KetBra &kb1, const KetBra &kb2) {
-  return Equals(kb1, kb2);
 }
 
 static std::bitset<NQUBITS> random_bitset(std::mt19937 &gen) {
@@ -444,4 +508,98 @@ std::shared_ptr<PureState> PickRandomPure(std::shared_ptr<SumState> &root,
   std::uniform_int_distribution<size_t> dist(0, pures.size() - 1);
   size_t rand_ind = dist(gen);
   return pures[rand_ind];
+}
+
+bool Equals(const std::shared_ptr<PureState> &p1,
+            const std::shared_ptr<PureState> &p2) {
+  return p1->bits == p2->bits && p1->space == p2->space;
+}
+
+bool Equals_slow(const std::shared_ptr<SumState> &sum1,
+                 const std::shared_ptr<SumState> &sum2) {
+  auto self_inner_1 = Inner_slow(sum1, sum1);
+  auto inner_12 = Inner_slow(sum1, sum2);
+  return std::abs(self_inner_1.real() - inner_12.real()) <
+         1e-4 * self_inner_1.real();
+}
+
+static bool equals_literal_rec(const ptr_variant &var1,
+                               const ptr_variant &var2) {
+  using pureptr = std::shared_ptr<PureState>;
+  using prodptr = std::shared_ptr<ProductState>;
+  if (std::holds_alternative<pureptr>(var1) &&
+      std::holds_alternative<pureptr>(var2)) {
+    auto pure1 = std::get<pureptr>(var1);
+    auto pure2 = std::get<pureptr>(var2);
+    return *pure1 == *pure2;
+  } else if (std::holds_alternative<prodptr>(var1) &&
+             std::holds_alternative<prodptr>(var2)) {
+    auto prod1 = std::get<prodptr>(var1);
+    auto prod2 = std::get<prodptr>(var2);
+    if (prod1->states.size() != prod2->states.size())
+      return false;
+    for (const auto &&[sum1, sum2] :
+         std::views::zip(prod1->states, prod2->states)) {
+      if (!Equals_literal(sum1, sum2))
+        return false;
+    }
+    return true;
+  } else {
+    return false;
+  }
+}
+bool Equals_literal(const std::shared_ptr<SumState> &sum1,
+                    const std::shared_ptr<SumState> &sum2) {
+  if (sum1->states.size() != sum2->states.size())
+    return false;
+  for (const auto &&[var1, var2] :
+       std::views::zip(sum1->states, sum2->states)) {
+    if (!equals_literal_rec(var1, var2))
+      return false;
+  }
+  // this is needed to make it easier to compare stringified expressions to
+  // string-parsed expressions
+  constexpr double epsilon = 1e-5; // Adjust based on your ostream precision
+  bool coeffs_match = std::ranges::equal(
+      sum1->coeffs, sum2->coeffs, [](const complex &a, const complex &b) {
+        return std::abs(a.real() - b.real()) < epsilon &&
+               std::abs(a.imag() - b.imag()) < epsilon;
+      });
+  return coeffs_match;
+}
+
+bool Equals_literal_flat(const std::shared_ptr<SumState> &sum1,
+                         const std::shared_ptr<SumState> &sum2) {
+  std::unordered_map<PureState, complex, PureStateHash> pures1;
+  for (const auto &[coeff, var1] :
+       std::views::zip(sum1->coeffs, sum1->states)) {
+    if (!std::holds_alternative<std::shared_ptr<PureState>>(var1))
+      throw std::runtime_error(
+          "Equals_literal_flat should only be used on flattened states");
+    auto pure1 = std::get<std::shared_ptr<PureState>>(var1);
+    pures1[*pure1] += coeff;
+  }
+  std::unordered_map<PureState, complex, PureStateHash> pures2;
+  for (const auto &[coeff, var2] :
+       std::views::zip(sum2->coeffs, sum2->states)) {
+    if (!std::holds_alternative<std::shared_ptr<PureState>>(var2))
+      throw std::runtime_error(
+          "Equals_literal_flat should only be used on flattened states");
+    auto pure2 = std::get<std::shared_ptr<PureState>>(var2);
+    pures2[*pure2] += coeff;
+  }
+  if (pures1.size() != pures2.size())
+    return false;
+
+  constexpr double epsilon = 1e-5;
+  return std::ranges::all_of(pures1, [&pures2, epsilon](const auto &pair) {
+    const auto &[state, coeff1] = pair;
+    auto it = pures2.find(state);
+    if (it == pures2.end()) {
+      return false; // Key missing in second map
+    }
+    const auto &coeff2 = it->second;
+    return std::abs(coeff1.real() - coeff2.real()) < epsilon &&
+           std::abs(coeff1.imag() - coeff2.imag()) < epsilon;
+  });
 }

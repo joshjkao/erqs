@@ -2,10 +2,12 @@
 #include "optimization.h"
 #include "quantumstate.h"
 #include <cassert>
-// #include <iostream>
+#include <complex>
 #include <optional>
 #include <ranges>
+// #include <stdexcept>
 #include <unordered_map>
+#include <variant>
 
 SkewOperator Inner(const std::shared_ptr<PureState> &p1,
                    const std::shared_ptr<PureState> &p2) {
@@ -219,6 +221,7 @@ SkewOperator Multiply(const SkewOperator &o1, const SkewOperator &o2) {
 
 static ptr_variant tensor(const std::shared_ptr<PureState> &p1,
                           const std::shared_ptr<PureState> &p2) {
+  assert((p1->space & p2->space).none());
   return MakePure(QSpace{p1->space | p2->space}, QSpace{p1->bits | p2->bits});
 }
 static ptr_variant tensor(const std::shared_ptr<PureState> &p1,
@@ -335,25 +338,84 @@ double ExpectedValue(const PauliOperator &pauli,
   assert(inner.ketbras.size() == 1);
   assert(GetSpace(inner.ketbras[0].bra) == QSpace{0});
   assert(GetSpace(inner.ketbras[0].ket) == QSpace{0});
-  assert(inner.ketbras[0].coeff.imag() <= 1e-6);
+  // assert(inner.ketbras[0].coeff.imag() <= 1e-6);
   return inner.ketbras[0].coeff.real();
 }
 double ExpectedValue(const PauliHamiltonian &h,
                      const std::shared_ptr<SumState> &state) {
   auto ket = Operate(h, state);
   SkewOperator inner = Inner(state, ket);
-  // if (inner.ketbras.size() != 1) {
-  //   std::cout << "error here\n";
-  //   std::cout << "ket was\n";
-  //   Print(state);
-  //   std::cout << "\n";
-  //   std::cout << "bra was\n";
-  //   Print(ket);
-  //   std::cout << "\n";
-  // }
-  assert(inner.ketbras.size() == 1);
+  double self_inner = Norm(state);
+  assert(inner.ketbras.size() == 1 || inner.ketbras.empty());
+  if (inner.ketbras.empty())
+    return 0.0;
   assert(GetSpace(inner.ketbras[0].bra) == QSpace{0});
   assert(GetSpace(inner.ketbras[0].ket) == QSpace{0});
   // assert(inner.ketbras[0].coeff.imag() <= 1e-6);
-  return inner.ketbras[0].coeff.real();
+  return inner.ketbras[0].coeff.real() / self_inner;
+}
+
+// needed to perform compression
+struct PureStateHash {
+  std::size_t operator()(const PureState &t) const {
+    std::size_t seed = 0;
+    auto hash_combine = [&seed](std::size_t hash_value) {
+      seed ^= hash_value + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+    };
+    std::hash<BitString> bitset_hasher;
+    hash_combine(bitset_hasher(t.space));
+    hash_combine(bitset_hasher(t.bits));
+    return seed;
+  }
+};
+
+double ExpectedValue_slow(const PauliHamiltonian &h,
+                          const std::shared_ptr<SumState> &state) {
+
+  // auto clone = Clone(state);
+  // Flatten(clone);
+  // auto ket = Operate(h, clone);
+  // complex inner = Inner_slow(clone, ket);
+  // return inner.real();
+
+  auto clone = Clone(state);
+  Flatten(clone);
+
+  std::unordered_map<PureState, complex, PureStateHash> conjugated_coeffs;
+
+  double norm_sq{0.0};
+  for (const auto &coeff : clone->coeffs) {
+    // this is fine because Flatten combines redundant pure states
+    norm_sq += (std::conj(coeff) * coeff).real();
+  }
+
+  for (const auto &&[coeff, var] :
+       std::views::zip(clone->coeffs, clone->states)) {
+    assert(std::holds_alternative<std::shared_ptr<PureState>>(var));
+    auto pure = std::get<std::shared_ptr<PureState>>(var);
+    for (const auto &&[h_coeff, op] : std::views::zip(h.coeffs, h.operators)) {
+      BitString y_mask = op.y & pure->bits;
+      BitString not_y_mask = op.y & ~pure->bits;
+      BitString z_mask = op.z & pure->bits;
+      BitString flip_mask = op.x | op.y;
+      BitString new_bits = pure->bits ^ flip_mask;
+      int k =
+          (2 * z_mask.count() + 1 * not_y_mask.count() + 3 * y_mask.count()) %
+          4;
+      static const complex phases[] = {{1, 0}, {0, 1}, {-1, 0}, {0, -1}};
+      complex phase = phases[k];
+      complex new_coeff = coeff * h_coeff * phase;
+      conjugated_coeffs[PureState{pure->space, new_bits}] += new_coeff;
+    }
+  }
+  complex accumulator{0.0};
+  for (const auto &&[coeff, var] :
+       std::views::zip(clone->coeffs, clone->states)) {
+    auto pure = std::get<std::shared_ptr<PureState>>(var);
+    auto it = conjugated_coeffs.find(*pure);
+    if (it == conjugated_coeffs.end())
+      continue;
+    accumulator += std::conj(coeff) * it->second;
+  }
+  return accumulator.real() / norm_sq;
 }

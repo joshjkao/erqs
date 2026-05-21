@@ -2,6 +2,7 @@
 #include "operations.h"
 #include "quantumstate.h"
 // #include <iostream>
+#include <cmath>
 #include <cstddef>
 #include <memory>
 #include <nlopt.hpp>
@@ -9,6 +10,7 @@
 #include <ranges>
 #include <stdexcept>
 #include <unordered_map>
+#include <variant>
 
 static void set_coefficients(std::vector<complex> &,
                              std::shared_ptr<PureState> &) {
@@ -25,6 +27,8 @@ static void set_coefficients(std::vector<complex> &coeffs,
 static void set_coefficients(std::vector<complex> &coeffs,
                              std::shared_ptr<SumState> &state) {
   for (auto &c : state->coeffs) {
+    if (coeffs.empty())
+      throw std::runtime_error("not enough coefficients to set");
     c = coeffs.back();
     coeffs.pop_back();
   }
@@ -36,6 +40,8 @@ void SetCoefficients(const std::vector<complex> &coeffs,
                      std::shared_ptr<SumState> &state) {
   auto coeffscp = coeffs;
   set_coefficients(coeffscp, state);
+  if (!coeffscp.empty())
+    throw std::runtime_error("too many coefficients passed to set");
 }
 void SetCoefficients(const std::vector<double> &coeffs,
                      std::shared_ptr<SumState> &state) {
@@ -144,7 +150,8 @@ void Prune(std::shared_ptr<SumState> &root, double threshold) {
     double re = root->coeffs[i].real();
     double im = root->coeffs[i].imag();
     double mag = (re * re + im * std::conj(im)).real();
-    if (mag >= threshold && prune_should_keep(root->states[i])) {
+
+    if (std::sqrt(mag) >= threshold && prune_should_keep(root->states[i])) {
       coeffs_new.push_back(root->coeffs[i]);
       states_new.push_back(root->states[i]);
     }
@@ -204,22 +211,29 @@ static void remove_singles_rec(std::shared_ptr<SumState> &state) {
     remove_singles_rec(var);
   }
   std::vector<ptr_variant> states_new;
-  // dropping a coefficient, technically
-  for (auto var : state->states) {
+  std::vector<complex> coeffs_new;
+  for (auto &&[coeff, var] : std::views::zip(state->coeffs, state->states)) {
     auto var_states = get_states_if_product(var);
     // the variant is a pure state
-    if (var_states.empty())
+    if (var_states.empty()) {
+      coeffs_new.push_back(coeff);
       states_new.push_back(var);
+    }
     // the variant has more than one factor state
-    else if (var_states.size() > 1)
+    else if (var_states.size() > 1) {
+      coeffs_new.push_back(coeff);
       states_new.push_back(var);
+    }
     // the variant is a product state with a single term
     else {
-      for (auto child_var : var_states[0]->states) {
+      for (auto &&[child_coeff, child_var] :
+           std::views::zip(var_states[0]->coeffs, var_states[0]->states)) {
+        coeffs_new.push_back(coeff * child_coeff);
         states_new.push_back(child_var);
       }
     }
   }
+  state->coeffs = coeffs_new;
   state->states = states_new;
 }
 static void remove_singles_rec(std::shared_ptr<ProductState> &state) {
@@ -270,30 +284,21 @@ void RemoveSingles(std::shared_ptr<SumState> &root) {
   }
 }
 
-static complex normalize_rec(std::shared_ptr<PureState>) { return 1.0; }
-static complex normalize_rec(std::shared_ptr<ProductState> state);
-static complex normalize_rec(ptr_variant var) {
-  return std::visit([](auto p) { return normalize_rec(p); }, var);
-}
-static complex normalize_rec(std::shared_ptr<SumState> state) {
-  for (auto &&[c, v] : std::views::zip(state->coeffs, state->states))
-    c *= normalize_rec(v);
-  complex norm2 = 0.0;
-  for (auto c : state->coeffs)
-    norm2 += c * std::conj(c);
-  complex norm = sqrt(norm2.real());
-  for (auto &c : state->coeffs)
-    c /= norm;
-  return norm;
-}
-static complex normalize_rec(std::shared_ptr<ProductState> state) {
-  complex prod = 1.0;
-  for (auto s : state->states) {
-    prod *= normalize_rec(s);
+void Normalize_slow(std::shared_ptr<SumState> &root) {
+  auto self_inner = Inner_slow(root, root);
+  complex norm = std::sqrt(self_inner.real());
+  for (auto &coeff : root->coeffs) {
+    coeff /= norm;
   }
-  return prod;
 }
-void Normalize(std::shared_ptr<SumState> &root) { normalize_rec(root); }
+
+void Normalize(std::shared_ptr<SumState> &root) {
+  auto self_inner = Inner(root, root);
+  complex norm = std::sqrt(self_inner.ketbras[0].coeff.real());
+  for (auto &coeff : root->coeffs) {
+    coeff /= norm;
+  }
+}
 
 // needed to perform compression
 using PureTuple = std::tuple<QSpace, QSpace>;
@@ -340,10 +345,12 @@ ptr_variant Simplify(std::shared_ptr<ProductState> &ptr) {
   std::vector<std::shared_ptr<SumState>> sums;
   for (auto &sum : ptr->states) {
     sum = Simplify(sum);
+  }
+  for (auto &sum : ptr->states) {
     auto tuple_if_pure = get_tuple_if_pure(sum);
     if (tuple_if_pure) {
       auto &[tup_coeff, tup_space, tup_bits] = tuple_if_pure.value();
-      coeff *= coeff;
+      coeff *= tup_coeff;
       space |= tup_space;
       bits |= tup_bits;
     } else {
@@ -355,7 +362,9 @@ ptr_variant Simplify(std::shared_ptr<ProductState> &ptr) {
   if (sums.empty()) {
     // sums empty means we should return the pure state directly instead of
     // wrapping it in a product
-    return temp_pure;
+    if (coeff == complex{1.0})
+      return temp_pure;
+    return MakeProduct({MakeSum({coeff}, {temp_pure})});
   } else {
     // otherwise, we have nontrivial sum states
     if (space.any() || coeff != complex{1.0}) {
@@ -376,12 +385,27 @@ std::shared_ptr<SumState> Simplify(std::shared_ptr<SumState> &ptr) {
   std::vector<ptr_variant> vars;
   for (auto &&[coeff, var] : std::views::zip(ptr->coeffs, ptr->states)) {
     var = Simplify(var);
+  }
+
+  for (auto &&[coeff, var] : std::views::zip(ptr->coeffs, ptr->states)) {
     auto tuple_if_pure =
         std::visit([](auto &v) { return get_tuple_if_pure(v); }, var);
     if (tuple_if_pure) {
       auto &[tup_coeff, tup_space, tup_bits] = tuple_if_pure.value();
       PureTuple tuple{tup_space, tup_bits};
       pures[tuple] += coeff * tup_coeff;
+    } else if (std::holds_alternative<std::shared_ptr<ProductState>>(var)) {
+      auto prod = std::get<std::shared_ptr<ProductState>>(var);
+      if (prod->states.size() == 1) {
+        for (auto &&[child_coeff, child_var] : std::views::zip(
+                 prod->states[0]->coeffs, prod->states[0]->states)) {
+          coeffs.push_back(coeff * child_coeff);
+          vars.push_back(child_var);
+        }
+      } else {
+        coeffs.push_back(coeff);
+        vars.push_back(var);
+      }
     } else {
       coeffs.push_back(coeff);
       vars.push_back(var);

@@ -12,6 +12,7 @@ add_library(erqs
   src/quantumstate.cpp
   src/operations.cpp
   src/optimization.cpp
+  src/validation.cpp
 )
 
 target_include_directories(erqs PUBLIC include)

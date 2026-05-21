@@ -3,3 +3,5 @@
 build
 data
 output
+.gdb_history
+scratch

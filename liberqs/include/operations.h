@@ -34,3 +34,5 @@ double ExpectedValue(const PauliOperator &pauli,
                      const std::shared_ptr<SumState> &state);
 double ExpectedValue(const PauliHamiltonian &h,
                      const std::shared_ptr<SumState> &state);
+double ExpectedValue_slow(const PauliHamiltonian &h,
+                          const std::shared_ptr<SumState> &state);
