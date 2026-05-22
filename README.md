@@ -4,7 +4,7 @@
 
 From the root directory:
 ```
-cmake -CMAKE_BUILD_TYPE=Release -S . -B build
+cmake -DCMAKE_BUILD_TYPE=Release -B build
 cmake --build build -j<N_CPU>
 ```
 
