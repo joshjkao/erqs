@@ -31,23 +31,38 @@ auto main(int argc, char **argv) -> int {
   std::random_device rd{};
   std::mt19937 gen{rd()};
 
-  auto random_state = RandomSumState(max_depth, n_terms, n_factors, space, gen);
-  auto original = Clone(random_state);
+  auto original = RandomSumState(max_depth, n_terms, n_factors, space, gen);
+  auto simplified = Clone(original);
 
   if (print_state) {
     Print(original);
     std::cout << "\n";
   }
 
-  auto simplified = Simplify(random_state);
+  simplified = Simplify(simplified);
   bool simplified_is_valid = Validate(simplified, CHECK_ALL);
 
+  // auto squash_removed = Clone(original);
+  // SquashPures(squash_removed);
+  // RemoveSingles(squash_removed);
+  // SquashPures(squash_removed);
+  // bool squash_removed_is_valid = Validate(squash_removed, CHECK_ALL);
+
   bool simplified_equals_original = false;
-  if (test_equality)
+  // bool sr_equals_original = false;
+  if (test_equality) {
     simplified_equals_original = Equals_slow(simplified, original);
+    // sr_equals_original = Equals_slow(squash_removed, original);
+  }
 
   std::cout << "{\n";
-  std::cout << "\t\"is_valid\": " << simplified_is_valid << ",\n";
-  std::cout << "\t\"matches_original\": " << simplified_equals_original << "\n";
+  std::cout << "\t\"simplified_is_valid\": " << simplified_is_valid << ",\n";
+  std::cout << "\t\"simplified_matches_original\": "
+            << simplified_equals_original << "\n";
+  // std::cout << "\t\"squash_removed_is_valid\": " << squash_removed_is_valid
+  // << ",\n";
+  // std::cout << "\t\"squash_removed_matches_original\": " <<
+  // sr_equals_original
+  // << "\n";
   std::cout << "}";
 }

@@ -5,7 +5,6 @@
 #include <complex>
 #include <optional>
 #include <ranges>
-// #include <stdexcept>
 #include <unordered_map>
 #include <variant>
 
@@ -188,7 +187,6 @@ void Add(SkewOperator &o1, const SkewOperator &o2) {
     o1.ketbras.push_back(kb);
   }
   o1 = Simplify(o1);
-  // o1 = CompressConstants(o1);
 }
 void Multiply(SkewOperator &o, const complex &c) {
   for (auto &kb : o.ketbras) {
@@ -200,8 +198,6 @@ SkewOperator Multiply(const SkewOperator &o1, const SkewOperator &o2) {
   SkewOperator ret{};
   for (const auto &kb1 : o1.ketbras) {
     for (const auto &kb2 : o2.ketbras) {
-      // SkewOperator o3 = CompressConstants(Inner(kb1.bra, kb2.ket));
-      // SkewOperator o4 = CompressConstants(Inner(kb2.bra, kb1.ket));
       SkewOperator o3 = Simplify(Inner(kb1.bra, kb2.ket));
       SkewOperator o4 = Simplify(Inner(kb2.bra, kb1.ket));
       for (auto &kb3 : o3.ketbras) {
@@ -215,8 +211,7 @@ SkewOperator Multiply(const SkewOperator &o1, const SkewOperator &o2) {
       }
     }
   }
-  // return Simplify(ret);
-  return ret;
+  return Simplify(ret);
 }
 
 static ptr_variant tensor(const std::shared_ptr<PureState> &p1,
@@ -357,12 +352,6 @@ double ExpectedValue(const PauliHamiltonian &h,
 
 double ExpectedValue_slow(const PauliHamiltonian &h,
                           const std::shared_ptr<SumState> &state) {
-
-  // auto clone = Clone(state);
-  // Flatten(clone);
-  // auto ket = Operate(h, clone);
-  // complex inner = Inner_slow(clone, ket);
-  // return inner.real();
 
   auto clone = Clone(state);
   Flatten(clone);
