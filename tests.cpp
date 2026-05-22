@@ -347,7 +347,7 @@ TEST(Simplify, Redundant_Pures) {
   auto sum1 = MakeSum({2, 3}, {pure1, pure2});
   EXPECT_FALSE(Validate(sum1, ValidationArgs{.log_to_stdout = false}));
   auto sum1_simple = Simplify(sum1);
-  EXPECT_TRUE(Validate(sum1_simple, ValidationArgs{}));
+  EXPECT_TRUE(Validate(sum1_simple, CHECK_ALL));
   EXPECT_TRUE(sum1_simple->coeffs.size() == 1);
   EXPECT_TRUE(Equals_slow(sum1_simple, sum1));
 }
@@ -386,7 +386,7 @@ TEST(Simplify, BigTree) {
   std::mt19937 gen(rd());
   auto rand1 = RandomSumState(7, 7, 7, ~QSpace{0}, gen);
   auto simp1 = Simplify(rand1);
-  EXPECT_TRUE(Validate(simp1, CHECK_ALL_QUIET));
+  EXPECT_TRUE(Validate(simp1, CHECK_ALL));
 }
 
 TEST(Inner, Slow) {

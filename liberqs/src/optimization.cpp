@@ -300,56 +300,54 @@ void Normalize(std::shared_ptr<SumState> &root) {
   }
 }
 
-// needed to perform compression
-using PureTuple = std::tuple<QSpace, QSpace>;
 using CoeffPureTuple = std::tuple<complex, QSpace, QSpace>;
-struct PureTupleHash {
-  std::size_t operator()(const PureTuple &t) const {
-    std::size_t seed = 0;
-    auto hash_combine = [&seed](std::size_t hash_value) {
-      seed ^= hash_value + 0x9e3779b9 + (seed << 6) + (seed >> 2);
-    };
-    std::hash<BitString> bitset_hasher;
-    hash_combine(bitset_hasher(std::get<0>(t)));
-    hash_combine(bitset_hasher(std::get<1>(t)));
-    return seed;
-  }
+template <class... Ts> struct overloaded : Ts... {
+  using Ts::operator()...;
 };
-static std::optional<CoeffPureTuple>
-get_tuple_if_pure(std::shared_ptr<SumState> &ptr) {
-  // assume we're already as simple as possible
-  if (ptr->states.size() != 1)
-    return std::nullopt;
-  auto pure_ptr_ptr = std::get_if<std::shared_ptr<PureState>>(&ptr->states[0]);
-  if (!pure_ptr_ptr)
-    return std::nullopt;
-  return CoeffPureTuple{ptr->coeffs[0], (*pure_ptr_ptr)->space,
-                        (*pure_ptr_ptr)->bits};
+template <class... Ts> overloaded(Ts...) -> overloaded<Ts...>;
+
+// Forward declare to allow mutual recursion
+std::optional<CoeffPureTuple> ExtractPure(const ptr_variant &var);
+std::optional<CoeffPureTuple> ExtractPure(const std::shared_ptr<SumState> &s);
+
+std::optional<CoeffPureTuple> ExtractPure(const std::shared_ptr<SumState> &s) {
+  if (s->states.size() == 1) {
+    if (auto *p = std::get_if<std::shared_ptr<PureState>>(&s->states[0])) {
+      return CoeffPureTuple{s->coeffs[0], (*p)->space, (*p)->bits};
+    }
+  }
+  return std::nullopt;
 }
-static std::optional<CoeffPureTuple>
-get_tuple_if_pure(std::shared_ptr<PureState> &ptr) {
-  return CoeffPureTuple{complex{1.0}, ptr->space, ptr->bits};
+
+std::optional<CoeffPureTuple> ExtractPure(const ptr_variant &var) {
+  return std::visit(overloaded{[](const std::shared_ptr<PureState> &p)
+                                   -> std::optional<CoeffPureTuple> {
+                                 return CoeffPureTuple{complex{1.0}, p->space,
+                                                       p->bits};
+                               },
+                               [](const std::shared_ptr<ProductState> &prod)
+                                   -> std::optional<CoeffPureTuple> {
+                                 if (prod->states.size() == 1) {
+                                   return ExtractPure(prod->states[0]);
+                                 }
+                                 return std::nullopt;
+                               }},
+                    var);
 }
-static std::optional<CoeffPureTuple>
-get_tuple_if_pure(std::shared_ptr<ProductState> &ptr) {
-  if (ptr->states.size() != 1)
-    return std::nullopt;
-  return get_tuple_if_pure(ptr->states[0]);
-}
-std::shared_ptr<SumState> Simplify(std::shared_ptr<SumState> &ptr);
+
 ptr_variant Simplify(std::shared_ptr<PureState> &ptr) { return ptr; }
+
 ptr_variant Simplify(std::shared_ptr<ProductState> &ptr) {
   complex coeff{1.0};
-  QSpace space{0};
-  QSpace bits{0};
+  QSpace space{0}, bits{0};
   std::vector<std::shared_ptr<SumState>> sums;
+
   for (auto &sum : ptr->states) {
-    sum = Simplify(sum);
-  }
-  for (auto &sum : ptr->states) {
-    auto tuple_if_pure = get_tuple_if_pure(sum);
-    if (tuple_if_pure) {
-      auto &[tup_coeff, tup_space, tup_bits] = tuple_if_pure.value();
+    sum = Simplify(sum); // Simplify child sums
+
+    // Calls ExtractPure(const std::shared_ptr<SumState>&)
+    if (auto pure_opt = ExtractPure(sum)) {
+      auto &[tup_coeff, tup_space, tup_bits] = *pure_opt;
       coeff *= tup_coeff;
       space |= tup_space;
       bits |= tup_bits;
@@ -360,63 +358,66 @@ ptr_variant Simplify(std::shared_ptr<ProductState> &ptr) {
 
   auto temp_pure = MakePure(space, bits);
   if (sums.empty()) {
-    // sums empty means we should return the pure state directly instead of
-    // wrapping it in a product
     if (coeff == complex{1.0})
       return temp_pure;
     return MakeProduct({MakeSum({coeff}, {temp_pure})});
   } else {
-    // otherwise, we have nontrivial sum states
     if (space.any() || coeff != complex{1.0}) {
-      // if our pure state is just a representation of the number 1, keeping it
-      // is redundant
-      auto temp_sum = MakeSum({coeff}, {temp_pure});
-      sums.push_back(temp_sum);
+      sums.push_back(MakeSum({coeff}, {temp_pure}));
     }
     return MakeProduct(sums);
   }
 }
-ptr_variant Simplify(ptr_variant &ptr) {
-  return std::visit([](auto &v) { return Simplify(v); }, ptr);
-}
+
 std::shared_ptr<SumState> Simplify(std::shared_ptr<SumState> &ptr) {
-  std::unordered_map<PureTuple, complex, PureTupleHash> pures;
+  std::unordered_map<PureState, complex, PureStateHash> pures;
   std::vector<complex> coeffs;
   std::vector<ptr_variant> vars;
-  for (auto &&[coeff, var] : std::views::zip(ptr->coeffs, ptr->states)) {
-    var = Simplify(var);
-  }
+
+  auto add_term = [&](complex c, const ptr_variant &v) {
+    // Calls ExtractPure(const ptr_variant&)
+    if (auto pure_opt = ExtractPure(v)) {
+      auto &[tup_coeff, tup_space, tup_bits] = *pure_opt;
+      pures[PureState{tup_space, tup_bits}] += c * tup_coeff;
+    } else {
+      coeffs.push_back(c);
+      vars.push_back(v);
+    }
+  };
 
   for (auto &&[coeff, var] : std::views::zip(ptr->coeffs, ptr->states)) {
-    auto tuple_if_pure =
-        std::visit([](auto &v) { return get_tuple_if_pure(v); }, var);
-    if (tuple_if_pure) {
-      auto &[tup_coeff, tup_space, tup_bits] = tuple_if_pure.value();
-      PureTuple tuple{tup_space, tup_bits};
-      pures[tuple] += coeff * tup_coeff;
-    } else if (std::holds_alternative<std::shared_ptr<ProductState>>(var)) {
-      auto prod = std::get<std::shared_ptr<ProductState>>(var);
-      if (prod->states.size() == 1) {
-        for (auto &&[child_coeff, child_var] : std::views::zip(
-                 prod->states[0]->coeffs, prod->states[0]->states)) {
-          coeffs.push_back(coeff * child_coeff);
-          vars.push_back(child_var);
-        }
-      } else {
-        coeffs.push_back(coeff);
-        vars.push_back(var);
-      }
-    } else {
-      coeffs.push_back(coeff);
-      vars.push_back(var);
-    }
+    var = Simplify(var); // Simplify the variant
+
+    // Strictly match what is actually inside ptr_variant
+    std::visit(overloaded{[&](const std::shared_ptr<ProductState> &prod) {
+                            if (prod->states.size() == 1) {
+                              // prod->states[0] is a SumState, so zip its
+                              // coeffs and variants
+                              for (auto &&[child_coeff, child_var] :
+                                   std::views::zip(prod->states[0]->coeffs,
+                                                   prod->states[0]->states)) {
+                                add_term(coeff * child_coeff, child_var);
+                              }
+                            } else {
+                              add_term(coeff, var);
+                            }
+                          },
+                          [&](const std::shared_ptr<PureState> &) {
+                            add_term(coeff, var);
+                          }},
+               var);
   }
-  for (const auto &[tuple, coeff] : pures) {
-    coeffs.push_back(coeff);
-    auto &[space, bits] = tuple;
-    vars.push_back(MakePure(space, bits));
+
+  for (const auto &[tuple, c] : pures) {
+    coeffs.push_back(c);
+    vars.push_back(MakePure(tuple.space, tuple.bits));
   }
+
   return MakeSum(coeffs, vars);
+}
+
+ptr_variant Simplify(ptr_variant &ptr) {
+  return std::visit([](auto &v) { return Simplify(v); }, ptr);
 }
 
 static std::optional<QSpace> bits_if_pure(std::shared_ptr<PureState> p) {
