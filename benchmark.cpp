@@ -56,7 +56,7 @@ int main(int argc, char **argv) {
     std::cout << "error: clone1 doesn't equal root\n";
   }
 
-  clone2 = Simplify(clone2);
+  Simplify(clone2);
   bool valid_2 = Validate(clone2, ValidationArgs{});
   if (!valid_2)
     std::cout << "removed squashed state is invalid\n";

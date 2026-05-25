@@ -346,7 +346,8 @@ TEST(Simplify, Redundant_Pures) {
   auto pure2 = MakePure("00001111", "00001111");
   auto sum1 = MakeSum({2, 3}, {pure1, pure2});
   EXPECT_FALSE(Validate(sum1, ValidationArgs{.log_to_stdout = false}));
-  auto sum1_simple = Simplify(sum1);
+  auto sum1_simple = Clone(sum1);
+  Simplify(sum1_simple);
   EXPECT_TRUE(Validate(sum1_simple, CHECK_ALL));
   EXPECT_TRUE(sum1_simple->coeffs.size() == 1);
   EXPECT_TRUE(Equals_slow(sum1_simple, sum1));
@@ -360,7 +361,7 @@ TEST(Simplify, SingleStates) {
   auto prod2 = MakeProduct({sum2});
   auto sum3 = MakeSum({4}, {prod2});
   EXPECT_FALSE(Validate(sum3, ValidationArgs{.log_to_stdout = false}));
-  sum3 = Simplify(sum3);
+  Simplify(sum3);
   EXPECT_TRUE(Validate(sum3, ValidationArgs{}));
 }
 
@@ -376,7 +377,8 @@ TEST(Simplify, Sum) {
   auto prod1 = MakeProduct({sum1, sum2, sum3});
   auto root = MakeSum({complex{1.0, 0.0}}, {prod1});
   EXPECT_FALSE(Validate(root, ValidationArgs{.log_to_stdout = false}));
-  auto root_simple = Simplify(root);
+  auto root_simple = Clone(root);
+  Simplify(root_simple);
   EXPECT_TRUE(Validate(root_simple, ValidationArgs{}));
   EXPECT_TRUE(Equals_slow(root, root_simple));
 }
@@ -385,7 +387,8 @@ TEST(Simplify, BigTree) {
   std::random_device rd{};
   std::mt19937 gen(rd());
   auto rand1 = RandomSumState(7, 7, 7, ~QSpace{0}, gen);
-  auto simp1 = Simplify(rand1);
+  auto simp1 = Clone(rand1);
+  Simplify(simp1);
   EXPECT_TRUE(Validate(simp1, CHECK_ALL));
 }
 

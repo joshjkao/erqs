@@ -39,7 +39,7 @@ auto main(int argc, char **argv) -> int {
     std::cout << "\n";
   }
 
-  simplified = Simplify(simplified);
+  Simplify(simplified);
   bool simplified_is_valid = Validate(simplified, CHECK_ALL);
 
   // auto squash_removed = Clone(original);

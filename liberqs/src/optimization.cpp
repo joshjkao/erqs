@@ -335,15 +335,16 @@ std::optional<CoeffPureTuple> ExtractPure(const ptr_variant &var) {
                     var);
 }
 
-ptr_variant Simplify(std::shared_ptr<PureState> &ptr) { return ptr; }
+static std::shared_ptr<SumState> simplify(std::shared_ptr<SumState> &ptr);
+static ptr_variant simplify(std::shared_ptr<PureState> &ptr) { return ptr; }
 
-ptr_variant Simplify(std::shared_ptr<ProductState> &ptr) {
+static ptr_variant simplify(std::shared_ptr<ProductState> &ptr) {
   complex coeff{1.0};
   QSpace space{0}, bits{0};
   std::vector<std::shared_ptr<SumState>> sums;
 
   for (auto &sum : ptr->states) {
-    sum = Simplify(sum); // Simplify child sums
+    sum = simplify(sum); // Simplify child sums
 
     // Calls ExtractPure(const std::shared_ptr<SumState>&)
     if (auto pure_opt = ExtractPure(sum)) {
@@ -369,7 +370,11 @@ ptr_variant Simplify(std::shared_ptr<ProductState> &ptr) {
   }
 }
 
-std::shared_ptr<SumState> Simplify(std::shared_ptr<SumState> &ptr) {
+static ptr_variant simplify(ptr_variant &ptr) {
+  return std::visit([](auto &v) { return simplify(v); }, ptr);
+}
+
+static std::shared_ptr<SumState> simplify(std::shared_ptr<SumState> &ptr) {
   std::unordered_map<PureState, complex, PureStateHash> pures;
   std::vector<complex> coeffs;
   std::vector<ptr_variant> vars;
@@ -386,7 +391,7 @@ std::shared_ptr<SumState> Simplify(std::shared_ptr<SumState> &ptr) {
   };
 
   for (auto &&[coeff, var] : std::views::zip(ptr->coeffs, ptr->states)) {
-    var = Simplify(var); // Simplify the variant
+    var = simplify(var); // Simplify the variant
 
     // Strictly match what is actually inside ptr_variant
     std::visit(overloaded{[&](const std::shared_ptr<ProductState> &prod) {
@@ -416,9 +421,9 @@ std::shared_ptr<SumState> Simplify(std::shared_ptr<SumState> &ptr) {
   return MakeSum(coeffs, vars);
 }
 
-ptr_variant Simplify(ptr_variant &ptr) {
-  return std::visit([](auto &v) { return Simplify(v); }, ptr);
-}
+void Simplify(ptr_variant &var) { var = simplify(var); }
+
+void Simplify(std::shared_ptr<SumState> &ptr) { ptr = simplify(ptr); }
 
 static std::optional<QSpace> bits_if_pure(std::shared_ptr<PureState> p) {
   return p->bits;
@@ -460,47 +465,4 @@ void SquashPures(std::shared_ptr<SumState> &root) {
     sum->coeffs = coeffs_new;
     sum->states = states_new;
   }
-  // auto prods = CollectProducts(root);
-  // for (auto prod : prods) {
-  //   std::vector<std::shared_ptr<SumState>> states_new;
-  //   QSpace space_new{0};
-  //   QSpace bits_new{0};
-  //   complex coeff_new = 1.0;
-  //   for (auto s : prod->states) {
-  //     if (s->states.size() != 1) {
-  //       states_new.push_back(s);
-  //       continue;
-  //     }
-  //     auto bits = bits_if_pure(s->states[0]);
-  //     if (bits) {
-  //       bits_new |= bits.value();
-  //       space_new |= GetSpace(s->states[0]);
-  //       coeff_new *= s->coeffs[0];
-  //     } else {
-  //       states_new.push_back(s);
-  //     }
-  //   }
-  //   if (space_new.any()) {
-  //     auto pure_new = MakePure(space_new, bits_new);
-  //     auto sum_new = MakeSum({coeff_new}, {pure_new});
-  //     states_new.push_back(sum_new);
-  //   }
-  //   prod->states = states_new;
-  // }
 }
-
-// void Factorize(std::shared_ptr<SumState> &root) {
-// 	// unclear how to do this, it's not very well described in the notes
-// 	// "wherever separability emerges" is what he says, maybe i'll have to
-// ask
-// 	// him
-// 	// maybe look at sum states with more than one pure state, then look for
-// the
-// 	// bits they share
-// 	// for example, say we have a 11 and a 10: this could be rewritten as 1
-// 	// tensor 0+1
-// 	// it goes from two coefficients to two coefficients, though instead of
-// two
-// 	// pure states in a sum state it becomes a sumstate with a product state
-// 	// between two sums
-// }

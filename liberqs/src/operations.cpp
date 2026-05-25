@@ -155,8 +155,8 @@ SkewOperator Simplify(const SkewOperator &op) {
     ret.ketbras.push_back(kb);
   }
   for (auto &[coeff, ket, bra] : ret.ketbras) {
-    ket = Simplify(ket);
-    bra = Simplify(bra);
+    Simplify(ket);
+    Simplify(bra);
   }
   return ret;
 }

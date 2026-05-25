@@ -27,7 +27,7 @@ int main() {
   RemoveSingles(clone1);
   SquashPures(clone1);
 
-  clone2 = Simplify(clone2);
+  Simplify(clone2);
 
   size_t coeffs_original = CountCoefficients(root);
   size_t coeffs1 = CountCoefficients(clone1);
