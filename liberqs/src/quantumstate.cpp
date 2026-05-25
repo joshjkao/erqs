@@ -17,10 +17,12 @@
 
 std::shared_ptr<SumState> MakeSum(const std::vector<complex> &coeffs,
                                   const std::vector<ptr_variant> &states) {
-  QSpace this_space{0};
   if (coeffs.size() != states.size()) {
     throw std::runtime_error("coeffs and states must be the same size");
+  } else if (coeffs.empty()) {
+    throw std::runtime_error("make sum cannot be called on an empty vector");
   }
+  QSpace this_space{0};
   for (auto &state : states) {
     QSpace next_space =
         std::visit([](const auto &e) { return GetSpace(e); }, state);
@@ -37,6 +39,10 @@ std::shared_ptr<SumState> MakeSum(const std::vector<complex> &coeffs,
 
 std::shared_ptr<ProductState>
 MakeProduct(const std::vector<std::shared_ptr<SumState>> &states) {
+  if (states.empty()) {
+    throw std::runtime_error(
+        "make product cannot be called on an empty vector");
+  }
   QSpace this_space{0};
   for (auto &state : states) {
     QSpace next_space = state->space;

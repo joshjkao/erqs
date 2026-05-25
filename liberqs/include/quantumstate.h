@@ -83,8 +83,9 @@ struct PauliHamiltonian {
 std::shared_ptr<PureState> MakePure(auto space, auto bits) {
   return std::make_shared<PureState>(QSpace(space), BitString(bits));
 }
-std::shared_ptr<SumState> MakeSum(const std::vector<complex> &coeffs,
-                                  const std::vector<ptr_variant> &states);
+
+std ::shared_ptr<SumState> MakeSum(const std::vector<complex> &coeffs,
+                                   const std::vector<ptr_variant> &states);
 std::shared_ptr<ProductState>
 MakeProduct(const std::vector<std::shared_ptr<SumState>> &states);
 

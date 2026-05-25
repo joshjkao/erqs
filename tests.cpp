@@ -3,6 +3,7 @@
 #include "validation.h"
 #include <gtest/gtest.h>
 #include <random>
+#include <stdexcept>
 
 TEST(Factories, MakeSum) {
   auto pure1 = MakePure("0111", "0000");
@@ -11,6 +12,7 @@ TEST(Factories, MakeSum) {
   auto pure4 = MakePure("1100", "0000");
   EXPECT_THROW(MakeSum({0.2, 0.2}, {pure1, pure2}), std::runtime_error);
   EXPECT_NO_THROW(MakeSum({2, 5}, {pure3, pure4}));
+  EXPECT_THROW(MakeSum({}, {}), std::runtime_error);
 }
 
 TEST(Factories, MakeProduct) {
@@ -25,6 +27,7 @@ TEST(Factories, MakeProduct) {
   auto sum3 = MakeSum({9, 1}, {pure5, pure6});
   EXPECT_THROW(MakeProduct({sum1, sum3}), std::runtime_error);
   EXPECT_NO_THROW(MakeProduct({sum1, sum2}));
+  EXPECT_THROW(MakeProduct({}), std::runtime_error);
 }
 
 TEST(Equality, Pure) {
