@@ -6,6 +6,48 @@
 #include <iostream>
 #include <random>
 
+struct TrialArgs {
+  size_t max_depth;
+  size_t n_terms;
+  size_t n_factors;
+};
+
+struct TrialResult {
+  complex inner_fast;
+  complex inner_slow;
+  double real_error;
+  double imag_error;
+};
+
+auto do_test(const TrialArgs &args) -> TrialResult {
+  auto [max_depth, n_terms, n_factors] = args;
+  QSpace space = ~QSpace{0};
+
+  std::random_device rd{};
+  std::mt19937 gen{rd()};
+
+  auto ket = RandomSumState(max_depth, n_terms, n_factors, space, gen);
+  auto bra = RandomSumState(max_depth, n_terms, n_factors, space, gen);
+
+  auto inner_fast_op = Inner(bra, ket);
+  auto inner_slow = Inner_slow(bra, ket);
+  complex inner_fast =
+      (inner_fast_op.ketbras.empty() ? 0.0 : inner_fast_op.ketbras[0].coeff);
+
+  double real_error =
+      std::abs((inner_slow.real() - inner_fast.real()) / inner_slow.real());
+  double imag_error =
+      std::abs((inner_slow.imag() - inner_fast.imag()) / inner_slow.imag());
+
+  TrialResult result{
+    .inner_fast = inner_fast,
+    .inner_slow = inner_slow,
+    .real_error = real_error,
+    .imag_error = imag_error
+  };
+
+  return result;
+}
 auto main(int argc, char **argv) -> int {
   cxxopts::Options options("randomtest_inner",
                            "attempt to validate inner products");
@@ -23,36 +65,15 @@ auto main(int argc, char **argv) -> int {
   size_t max_depth = result["max_depth"].as<size_t>();
   size_t n_terms = result["n_terms"].as<size_t>();
   size_t n_factors = result["n_factors"].as<size_t>();
-  bool print_state = result["print_state"].as<bool>();
-  QSpace space = ~QSpace{0};
+  //bool print_state = result["print_state"].as<bool>();
 
-  std::random_device rd{};
-  std::mt19937 gen{rd()};
+  TrialArgs args{.max_depth = max_depth,
+                 .n_terms = n_terms,
+                 .n_factors = n_factors};
 
-  auto ket = RandomSumState(max_depth, n_terms, n_factors, space, gen);
-  auto bra = RandomSumState(max_depth, n_terms, n_factors, space, gen);
-
-  if (print_state) {
-    Print(ket);
-    Print(bra);
+  #pragma omp parallel for
+  for (auto _: std::views::iota(0, 10)) {
+    auto res = do_test(args);
+    std::cout << res.real_error << " " << res.imag_error << "\n";
   }
-
-  auto inner_fast = Inner(bra, ket);
-  std::cout << "finished fast inner" << std::endl;
-  auto inner_slow = Inner_slow(bra, ket);
-  std::cout << "finished slow inner" << std::endl;
-  complex inner_fast_c =
-      (inner_fast.ketbras.empty() ? 0.0 : inner_fast.ketbras[0].coeff);
-  double inner_fast_re = inner_fast_c.real();
-  double inner_fast_im = inner_fast_c.imag();
-  std::cout << "{\n";
-  std::cout << "\t\"inner_slow\": " << inner_slow << ",\n";
-  std::cout << "\t\"inner_fast\": " << inner_fast_c << ",\n";
-  std::cout << "\t\"relative_error_re\": "
-            << (std::abs(inner_fast_re - inner_slow.real()) / inner_slow.real())
-            << "\n";
-  std::cout << "\t\"relative_error_im\": "
-            << (std::abs(inner_fast_im - inner_slow.imag()) / inner_slow.imag())
-            << "\n";
-  std::cout << "}";
 }

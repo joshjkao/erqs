@@ -49,7 +49,7 @@ FetchContent_MakeAvailable(cxxopts)
 
 # executable for testing stuff
 add_executable(randomtest_inner randomtest_inner.cpp)
-target_link_libraries(randomtest_inner PRIVATE erqs NLopt::nlopt cxxopts::cxxopts)
+target_link_libraries(randomtest_inner PRIVATE erqs NLopt::nlopt cxxopts::cxxopts OpenMP::OpenMP_CXX)
 
 # executable for testing stuff
 add_executable(randomtest_simplify randomtest_simplify.cpp)
