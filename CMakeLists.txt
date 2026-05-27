@@ -5,6 +5,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 project(erqs LANGUAGES CXX)
 
 add_compile_options(
+  -fopenmp
   -Wall
   -Wextra
   -Wpedantic
@@ -27,7 +28,8 @@ endif()
 
 add_subdirectory(liberqs)
 
-find_package(NLopt)
+find_package(OpenMP REQUIRED)
+find_package(NLopt REQUIRED)
 
 # executable for benchmarking stuff
 add_executable(benchmark benchmark.cpp)
@@ -64,8 +66,12 @@ target_link_libraries(randomtest_io PRIVATE erqs NLopt::nlopt cxxopts::cxxopts)
 
 
 # executable for optimizing
-# add_executable(opt opt.cpp)
-# target_link_libraries(opt PRIVATE erqs NLopt::nlopt)
+add_executable(opt opt.cpp)
+target_link_libraries(opt PRIVATE erqs NLopt::nlopt)
+
+# executable for optimizing
+add_executable(randomtest_dense_skew randomtest_dense_skew.cpp)
+target_link_libraries(randomtest_dense_skew PRIVATE erqs NLopt::nlopt cxxopts::cxxopts OpenMP::OpenMP_CXX)
 
 # tests
 FetchContent_Declare(

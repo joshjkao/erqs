@@ -1,9 +1,11 @@
 #include "optimization.h"
 #include "operations.h"
 #include "quantumstate.h"
+#include "validation.h"
 // #include <iostream>
 #include <cmath>
 #include <cstddef>
+#include <iostream>
 #include <memory>
 #include <nlopt.hpp>
 #include <optional>
@@ -54,6 +56,23 @@ void SetCoefficients(const std::vector<double> &coeffs,
   SetCoefficients(coeffs_complex, state);
 }
 
+void SetCoefficients_shallow(const std::vector<complex> &coeffs,
+                             std::shared_ptr<SumState> &state) {
+  if (state->coeffs.size() != coeffs.size())
+    throw std::runtime_error("list size mismatch");
+  state->coeffs = coeffs;
+}
+void SetCoefficients_shallow(const std::vector<double> &coeffs,
+                             std::shared_ptr<SumState> &state) {
+  std::vector<complex> coeffs_complex;
+  for (size_t i = 0; i < coeffs.size(); ++i) {
+    double re = coeffs[i++];
+    double im = coeffs[i];
+    coeffs_complex.push_back({re, im});
+  }
+  SetCoefficients_shallow(coeffs_complex, state);
+}
+
 static size_t count_coefficients(const std::shared_ptr<PureState> &) {
   return 0;
 }
@@ -70,6 +89,10 @@ size_t CountCoefficients(const std::shared_ptr<SumState> &state) {
     ret += std::visit([](const auto &e) { return count_coefficients(e); }, s);
   }
   return ret;
+};
+
+size_t CountCoefficients_shallow(const std::shared_ptr<SumState> &state) {
+  return state->coeffs.size();
 }
 
 static size_t count_nodes(const std::shared_ptr<PureState> &) { return 1; }
@@ -95,18 +118,16 @@ static double obj(const std::vector<double> &x, std::vector<double> &,
   double ret = (*f)(x);
   return ret;
 }
+
 double OptimizeCoefficients(const PauliHamiltonian &H,
                             std::shared_ptr<SumState> &root) {
   size_t num_coeffs = CountCoefficients(root);
   Callback e = [&](const std::vector<double> &x) -> double {
     SetCoefficients(x, root);
-    Normalize(root);
     double ret = ExpectedValue(H, root);
     return ret;
   };
   std::vector<double> grad;
-  std::vector<complex> coeffs(num_coeffs);
-  SetCoefficients(coeffs, root);
   nlopt::opt opt(nlopt::LN_COBYLA, static_cast<unsigned int>(num_coeffs) * 2);
   opt.set_min_objective(obj, static_cast<void *>(&e));
   opt.set_xtol_rel(1e-4);
@@ -116,6 +137,30 @@ double OptimizeCoefficients(const PauliHamiltonian &H,
   if (result > 0) {
     SetCoefficients(x, root);
     Normalize(root);
+    return minf;
+  } else {
+    throw std::runtime_error("error during minimuzation step");
+  }
+}
+
+double OptimizeCoefficients_local(const PauliHamiltonian &H,
+                                  std::shared_ptr<SumState> &root,
+                                  std::shared_ptr<SumState> &state) {
+  size_t num_coeffs = state->coeffs.size();
+  Callback e = [&](const std::vector<double> &x) -> double {
+    SetCoefficients_shallow(x, state);
+    double ret = ExpectedValue(H, root);
+    return ret;
+  };
+  std::vector<double> grad;
+  nlopt::opt opt(nlopt::LN_COBYLA, static_cast<unsigned int>(num_coeffs) * 2);
+  opt.set_min_objective(obj, static_cast<void *>(&e));
+  opt.set_xtol_rel(1e-4);
+  std::vector<double> x(num_coeffs * 2, 1.0);
+  double minf;
+  nlopt::result result = opt.optimize(x, minf);
+  if (result > 0) {
+    SetCoefficients_shallow(x, state);
     return minf;
   } else {
     throw std::runtime_error("error during minimuzation step");

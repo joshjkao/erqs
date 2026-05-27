@@ -406,6 +406,24 @@ ptr_variant RandomProductState(size_t max_depth, size_t n_terms,
   return random_product(max_depth, n_terms, n_factors, space, gen);
 }
 
+std::shared_ptr<SumState> ZeroOneTensor(QSpace space) {
+  std::vector<complex> coeffs;
+  std::vector<std::shared_ptr<SumState>> sums;
+  QSpace mask{1};
+  QSpace z{0};
+  for (size_t i = 0; i < NQUBITS; ++i) {
+    if ((space & mask).any()) {
+      auto zero = MakePure(mask, z);
+      auto one = MakePure(mask, mask);
+      auto sum = MakeSum({1, 1}, {zero, one});
+      sums.push_back(sum);
+    }
+    mask = mask << 1;
+  }
+  std::shared_ptr<ProductState> prod = MakeProduct(sums);
+  return MakeSum({1}, {prod});
+}
+
 // EXPERIMENTAL: arbitrary visitors
 static void recursive_invoke(Visitor &visitor,
                              std::shared_ptr<ProductState> prod);

@@ -1,12 +1,16 @@
 #include "operations.h"
 #include "optimization.h"
 #include "quantumstate.h"
+#include "validation.h"
 #include <chrono>
 // #include <iostream>
 #include <cmath>
+#include <iostream>
+#include <memory>
 #include <print>
 #include <random>
 #include <ranges>
+#include <variant>
 
 long time_in_ms(auto func) {
   auto start = std::chrono::high_resolution_clock::now();
@@ -29,14 +33,20 @@ void random_update(std::shared_ptr<SumState> root, std::mt19937 &gen) {
   }
 }
 
-int main(int argc, char **argv) {
+int main() {
   std::random_device rd;
   auto seed = rd();
   std::mt19937 gen{seed};
-  auto root = RandomSumState(2, 2, 2, ~QSpace{0}, gen);
+  // auto root = RandomSumState(3, 2, 2, QSpace{"1111"}, gen);
+  auto root = ZeroOneTensor(QSpace{"1111"});
 
-  SquashPures(root);
-  RemoveSingles(root);
+  Simplify(root);
+  Validate(root, CHECK_ALL);
+
+  Print(root);
+  std::cout << std::endl;
+
+  auto clone = Clone(root);
 
   // Z local terms
   PauliOperator op1{
@@ -58,45 +68,34 @@ int main(int argc, char **argv) {
   PauliOperator int4{
       .x = BitString{"1001"}, .y = BitString{"0000"}, .z = BitString{"0000"}};
 
-  PauliHamiltonian H{{0, 0, 0, 0, -0.5, -0.5, -0.5, -0.5},
+  PauliHamiltonian H{{2, 2, 2, 2, 1, 1, 1, 1},
                      {op1, op2, op3, op4, int1, int2, int3, int4}};
 
-  double lambda = 1.0;
+  Visitor visitor{
+      .sum_visitor =
+          [&](auto state) { OptimizeCoefficients_local(H, root, state); },
+      .prod_visitor = [](auto) {},
+      .pure_visitor = [](auto) {}};
 
-  if (argc > 1)
-    lambda = atof(argv[1]);
+  InvokeBottomUp(visitor, root);
+  double minf_local = ExpectedValue(H, root);
+  std::cout << "localized min " << minf_local << "\n";
 
-  std::println("seed: {}, lambda: {}", seed, lambda);
-  std::println(
-      "iteration num_coeffs_proposed E_internal_proposed E_total_proposed "
-      "accepted num_coeffs E_internal_min E_total_min time");
+  double minf_global = OptimizeCoefficients(H, clone);
+  std::cout << "global min " << minf_global << " ";
 
-  double curr_min_cost = INFINITY;
-  double curr_energy = INFINITY;
+  Normalize(clone);
+  Print(clone);
 
-  for (auto i : std::views::iota(0, 50)) {
-    auto root_cpy = Clone(root);
-    random_update(root_cpy, gen);
-    Normalize(root_cpy);
-    Prune(root_cpy, 1e-3);
-    RemoveSingles(root_cpy);
-    SquashPures(root_cpy);
+  Normalize(root);
+  Print(root);
 
-    auto time = time_in_ms([&]() { OptimizeCoefficients(H, root_cpy); });
+  auto inner_self1 = Inner_slow(root, root);
+  std::cout << inner_self1 << "\n";
+  auto inner_self2 = Inner_slow(root, root);
+  std::cout << inner_self2 << "\n";
 
-    double energy = ExpectedValue(H, root_cpy);
-    double cost = energy + lambda * CountCoefficients(root_cpy);
-    bool accepted = false;
-    if (cost < curr_min_cost) {
-      root = root_cpy;
-      curr_min_cost = cost;
-      curr_energy = energy;
-      accepted = true;
-    }
-    std::println("{} {} {} {} {} {} {} {} {}", i, CountCoefficients(root_cpy),
-                 energy, cost, accepted, CountCoefficients(root), curr_energy,
-                 curr_min_cost, time);
-    Print(root);
-    std::println();
-  }
+  auto inner = Inner_slow(clone, root);
+  std::cout << "inner between the two optimized states: " << inner << "\n";
+  std::cout << inner * std::conj(inner);
 }

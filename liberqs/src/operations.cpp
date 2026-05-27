@@ -3,6 +3,7 @@
 #include "quantumstate.h"
 #include <cassert>
 #include <complex>
+#include <iostream>
 #include <optional>
 #include <ranges>
 #include <unordered_map>
@@ -59,9 +60,17 @@ SkewOperator Inner(const std::shared_ptr<ProductState> &p1,
     }
   }
   if (has_unused) {
-    KetBra unused{.coeff = 1.0,
-                  .ket = MakeProduct(unused_kets),
-                  .bra = MakeProduct(unused_bras)};
+    ptr_variant ket;
+    if (unused_kets.empty())
+      ket = MakePure(QSpace{0}, QSpace{0});
+    else
+      ket = MakeProduct(unused_kets);
+    ptr_variant bra;
+    if (unused_bras.empty())
+      bra = MakePure(QSpace{0}, QSpace{0});
+    else
+      bra = MakeProduct(unused_bras);
+    KetBra unused{.coeff = 1.0, .ket = ket, .bra = bra};
     SkewOperator extra{{unused}};
     ret = Multiply(ret, extra);
   }
@@ -333,7 +342,6 @@ double ExpectedValue(const PauliOperator &pauli,
   assert(inner.ketbras.size() == 1);
   assert(GetSpace(inner.ketbras[0].bra) == QSpace{0});
   assert(GetSpace(inner.ketbras[0].ket) == QSpace{0});
-  // assert(inner.ketbras[0].coeff.imag() <= 1e-6);
   return inner.ketbras[0].coeff.real();
 }
 double ExpectedValue(const PauliHamiltonian &h,
@@ -346,7 +354,8 @@ double ExpectedValue(const PauliHamiltonian &h,
     return 0.0;
   assert(GetSpace(inner.ketbras[0].bra) == QSpace{0});
   assert(GetSpace(inner.ketbras[0].ket) == QSpace{0});
-  // assert(inner.ketbras[0].coeff.imag() <= 1e-6);
+  assert(inner.ketbras[0].coeff.imag() <= 1e-6);
+  assert(self_inner != 0.0);
   return inner.ketbras[0].coeff.real() / self_inner;
 }
 

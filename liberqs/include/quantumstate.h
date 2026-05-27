@@ -101,6 +101,8 @@ std::shared_ptr<SumState> RandomSumState(size_t max_depth, size_t n_terms,
                                          size_t n_factors, QSpace space,
                                          std::mt19937 &gen);
 
+std::shared_ptr<SumState> ZeroOneTensor(QSpace space);
+
 // ---- GETTERS ---- //
 inline const QSpace &GetSpace(const std::shared_ptr<PureState> &ptr) {
   return ptr->space;

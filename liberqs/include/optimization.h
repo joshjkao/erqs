@@ -6,12 +6,20 @@ void SetCoefficients(const std::vector<complex> &coeffs,
                      std::shared_ptr<SumState> &state);
 void SetCoefficients(const std::vector<double> &coeffs,
                      std::shared_ptr<SumState> &state);
+void SetCoefficients_shallow(const std::vector<complex> &coeffs,
+                             std::shared_ptr<SumState> &state);
+void SetCoefficients_shallow(const std::vector<double> &coeffs,
+                             std::shared_ptr<SumState> &state);
 size_t CountCoefficients(const std::shared_ptr<SumState> &state);
+size_t CountCoefficients_shallow(const std::shared_ptr<SumState> &state);
 size_t CountNodes(const std::shared_ptr<SumState> &root);
 
 // ---- COEFFICIENT OPTIMIZATION ---- //
 double OptimizeCoefficients(const PauliHamiltonian &H,
                             std::shared_ptr<SumState> &state);
+double OptimizeCoefficients_local(const PauliHamiltonian &H,
+                                  std::shared_ptr<SumState> &root,
+                                  std::shared_ptr<SumState> &state);
 
 // ---- STRUCTURE CHANGING ADJUSTMENTS ---- //
 void Prune(std::shared_ptr<SumState> &root, double threshold);
