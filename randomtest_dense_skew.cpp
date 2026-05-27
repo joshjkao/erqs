@@ -97,7 +97,7 @@ auto main(int argc, char **argv) -> int {
       "h_terms", "number of terms to make the hamiltonian",
       cxxopts::value<size_t>())("p,print_state", "print the state");
 
-  constexpr auto n_trials = 100;
+  constexpr auto n_trials = 1000;
 
   options.parse_positional({"max_depth", "n_terms", "n_factors", "h_terms"});
 
@@ -118,6 +118,9 @@ auto main(int argc, char **argv) -> int {
 #pragma omp parallel for
   for (auto _ : std::views::iota(0, n_trials)) {
     auto res = do_test(args);
-    std::cout << res.real_error << " " << res.imag_error << "\n";
+#pragma omp critical
+    {
+      std::cout << res.real_error << " " << res.imag_error << "\n";
+    }
   }
 }
