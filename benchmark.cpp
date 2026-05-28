@@ -38,52 +38,34 @@ int main(int argc, char **argv) {
   std::mt19937 gen{rd()};
   auto root =
       RandomSumState(max_depth, n_terms, n_factors, QSpace{bit_mask}, gen);
-  auto clone1 = Clone(root);
   auto clone2 = Clone(root);
 
-  // Print(root);
+  Simplify(clone2);
 
-  bool valid = Validate(root, ValidationArgs{.log_to_stdout = false});
+  bool valid = Validate(clone2, ValidationArgs{.log_to_stdout = false});
   if (!valid)
     std::cout << "root state is invalid\n";
 
-  RemoveSingles(clone1);
-  SquashPures(clone1);
-  bool valid_1 = Validate(clone1, ValidationArgs{});
-  if (!valid_1)
-    std::cout << "removed squashed state is invalid\n";
-  if (!Equals_slow(root, clone1)) {
-    std::cout << "error: clone1 doesn't equal root\n";
-  }
+  SkewOperator inner;
 
-  Simplify(clone2);
-  bool valid_2 = Validate(clone2, ValidationArgs{});
-  if (!valid_2)
-    std::cout << "removed squashed state is invalid\n";
-  if (!Equals_slow(root, clone2)) {
-    std::cout << "error: clone2 doesn't equal root\n";
-  }
+  auto do_inner = [&]() { inner = Inner(clone2, clone2); };
 
-  // SkewOperator inner;
+  auto time = time_in_ms(do_inner);
 
-  // auto do_inner = [&]() { inner = Inner(root, root); };
+  struct rusage usage;
+  getrusage(RUSAGE_SELF, &usage);
 
-  // auto time = time_in_ms(do_inner);
-
-  // struct rusage usage;
-  // getrusage(RUSAGE_SELF, &usage);
-
-  // std::cout << "{\n";
-  // std::cout << "\"max_depth\": " << max_depth << ",\n";
-  // std::cout << "\"n_terms\": " << n_terms << ",\n";
-  // std::cout << "\"n_factors\": " << n_factors << ",\n";
-  // std::cout << "\"n_bits\": " << n_bits << ",\n";
-  // std::cout << "\"n_nodes\": " << CountNodes(root) << ",\n";
-  // std::cout << "\"c_time\": " << time << ",\n";
-  // std::cout << "\"mem_max\": " << usage.ru_maxrss << ",\n";
-  // std::cout << "\"resulting_terms\": " << inner.ketbras.size() << ",\n";
-  // std::cout << "\"inner\": " << inner.ketbras[0].coeff.real() << "\n";
-  // std::cout << "}\n";
+  std::cout << "{\n";
+  std::cout << "\"max_depth\": " << max_depth << ",\n";
+  std::cout << "\"n_terms\": " << n_terms << ",\n";
+  std::cout << "\"n_factors\": " << n_factors << ",\n";
+  std::cout << "\"n_bits\": " << n_bits << ",\n";
+  std::cout << "\"n_nodes\": " << CountNodes(root) << ",\n";
+  std::cout << "\"c_time\": " << time << ",\n";
+  std::cout << "\"mem_max\": " << usage.ru_maxrss << ",\n";
+  std::cout << "\"resulting_terms\": " << inner.ketbras.size() << ",\n";
+  std::cout << "\"inner\": " << inner.ketbras[0].coeff.real() << "\n";
+  std::cout << "}\n";
 
   // std::cout << "before adjustment\n";
   // Print(root);
