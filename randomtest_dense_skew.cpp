@@ -20,7 +20,18 @@ struct TrialResult {
   complex inner_slow;
   double real_error;
   double imag_error;
+  long time_fast;
+  long time_slow;
 };
+
+long time_in_ms(auto func) {
+  auto start = std::chrono::high_resolution_clock::now();
+  func();
+  auto end = std::chrono::high_resolution_clock::now();
+  auto duration =
+      std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+  return duration.count();
+}
 
 auto do_test(const TrialArgs &args) -> TrialResult {
   auto [max_depth, n_terms, n_factors, h_terms] = args;
@@ -59,9 +70,15 @@ auto do_test(const TrialArgs &args) -> TrialResult {
 
   auto conj = Operate(H, random_ket);
   auto conj_clone = Clone(conj);
-  auto inner_fast_op = Inner(random_bra, conj);
+  // auto inner_fast_op = Inner(random_bra, conj);
+  SkewOperator inner_fast_op;
+  auto time_fast =
+      time_in_ms([&]() { inner_fast_op = Inner(random_bra, conj); });
 
-  auto inner_slow = Inner_slow(random_bra, conj_clone);
+  // auto inner_slow = Inner_slow(random_bra, conj_clone);
+  complex inner_slow;
+  auto time_slow =
+      time_in_ms([&]() { inner_slow = Inner_slow(random_bra, conj_clone); });
 
   complex inner_fast;
   if (inner_fast_op.ketbras.size() > 2)
@@ -83,7 +100,9 @@ auto do_test(const TrialArgs &args) -> TrialResult {
   TrialResult result{.inner_fast = inner_fast,
                      .inner_slow = inner_slow,
                      .real_error = real_error,
-                     .imag_error = imag_error};
+                     .imag_error = imag_error,
+                     .time_fast = time_fast,
+                     .time_slow = time_slow};
   return result;
 }
 
@@ -120,7 +139,8 @@ auto main(int argc, char **argv) -> int {
     auto res = do_test(args);
 #pragma omp critical
     {
-      std::cout << res.real_error << " " << res.imag_error << "\n";
+      std::cout << res.real_error << " " << res.imag_error << " "
+                << res.time_fast << " " << res.time_slow << "\n";
     }
   }
 }
