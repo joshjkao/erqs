@@ -4,6 +4,7 @@
 #include "validation.h"
 #include <chrono>
 #include <iostream>
+#include <memory>
 #include <random>
 
 auto time_in_ms(auto func) {
@@ -100,5 +101,5 @@ int main() {
   std::cout << ExpectedValue(H, clone1) << "\n";
   std::cout << ExpectedValue(H, clone2) << "\n";
 
-  //   // OptimizeCoefficients(H, root);
+  // OptimizeCoefficients(H, root);
 }

@@ -1,6 +1,7 @@
 #include "operations.h"
 #include "optimization.h"
 #include "quantumstate.h"
+#include "validation.h"
 #include <cassert>
 #include <complex>
 #include <iostream>
@@ -27,55 +28,32 @@ SkewOperator Inner(const std::shared_ptr<ProductState> &p1,
                    const std::shared_ptr<ProductState> &p2) {
   if ((GetSpace(p1) & GetSpace(p2)).none())
     return SkewOperator{{KetBra{.coeff = 1.0, .ket = p2, .bra = p1}}};
-
-  QSpace unused_bra = p1->space;
-  QSpace unused_ket = p2->space;
-  SkewOperator ret;
-  ret.ketbras.push_back(KetBra{.coeff = 1.0,
-                               .ket = MakePure(QSpace{0}, QSpace{0}),
-                               .bra = MakePure(QSpace{0}, QSpace{0})});
-  for (auto &s1 : p1->states) {
-    for (auto &s2 : p2->states) {
-      if ((s1->space & unused_bra & s2->space & unused_ket).any()) {
-        unused_bra ^= s1->space;
-        unused_ket ^= s2->space;
-        SkewOperator term = Inner(s1, s2);
-        ret = Multiply(ret, term);
-      }
+  auto bra = MakePure(QSpace{0}, QSpace{0});
+  auto ket = MakePure(QSpace{0}, QSpace{0});
+  SkewOperator ret{{KetBra{1.0, ket, bra}}};
+  for (const auto &bra_sum : p1->states) {
+    SkewOperator this_bra;
+    for (const auto &[bra_var_coeff, bra_var] :
+         std::views::zip(bra_sum->coeffs, bra_sum->states)) {
+      this_bra.ketbras.push_back(KetBra{.coeff = std::conj(bra_var_coeff),
+                                        .ket = MakePure(QSpace{0}, QSpace{0}),
+                                        .bra = bra_var});
     }
+    ret = Multiply(this_bra, ret);
   }
-  std::vector<std::shared_ptr<SumState>> unused_bras;
-  std::vector<std::shared_ptr<SumState>> unused_kets;
-  bool has_unused = false;
-  for (auto &s1 : p1->states) {
-    if ((s1->space & unused_bra).any()) {
-      unused_bras.push_back(s1);
-      has_unused = true;
+  for (const auto &ket_sum : p2->states) {
+    SkewOperator this_ket;
+    for (const auto &[ket_var_coeff, ket_var] :
+         std::views::zip(ket_sum->coeffs, ket_sum->states)) {
+      this_ket.ketbras.push_back(KetBra{.coeff = ket_var_coeff,
+                                        .ket = ket_var,
+                                        .bra = MakePure(QSpace{0}, QSpace{0})});
     }
+    ret = Multiply(ret, this_ket);
   }
-  for (auto &s2 : p2->states) {
-    if ((s2->space & unused_ket).any()) {
-      unused_kets.push_back(s2);
-      has_unused = true;
-    }
-  }
-  if (has_unused) {
-    ptr_variant ket;
-    if (unused_kets.empty())
-      ket = MakePure(QSpace{0}, QSpace{0});
-    else
-      ket = MakeProduct(unused_kets);
-    ptr_variant bra;
-    if (unused_bras.empty())
-      bra = MakePure(QSpace{0}, QSpace{0});
-    else
-      bra = MakeProduct(unused_bras);
-    KetBra unused{.coeff = 1.0, .ket = ket, .bra = bra};
-    SkewOperator extra{{unused}};
-    ret = Multiply(ret, extra);
-  }
-  return ret;
+  return Simplify(ret);
 }
+
 SkewOperator Inner(const std::shared_ptr<ProductState> &p1,
                    const std::shared_ptr<PureState> &p2) {
   std::shared_ptr<SumState> sum = MakeSum({1.0}, {p2});
@@ -203,20 +181,36 @@ void Multiply(SkewOperator &o, const complex &c) {
   }
 }
 
+// SkewOperator Multiply(const SkewOperator &o1, const SkewOperator &o2) {
+//   SkewOperator ret{};
+//   for (const auto &kb1 : o1.ketbras) {
+//     for (const auto &kb2 : o2.ketbras) {
+//       SkewOperator o3 = Simplify(Inner(kb1.bra, kb2.ket));
+//       SkewOperator o4 = Simplify(Inner(kb2.bra, kb1.ket));
+//       for (auto &kb3 : o3.ketbras) {
+//         for (auto &kb4 : o4.ketbras) {
+//           complex coeff = kb1.coeff * kb2.coeff * kb3.coeff * kb4.coeff;
+//           if (coeff != 0.0)
+//             ret.ketbras.push_back(
+//                 {kb1.coeff * kb2.coeff * kb3.coeff * kb4.coeff,
+//                  Tensor(kb3.ket, kb4.ket), Tensor(kb3.bra, kb4.bra)});
+//         }
+//       }
+//     }
+//   }
+//   return Simplify(ret);
+// }
+
 SkewOperator Multiply(const SkewOperator &o1, const SkewOperator &o2) {
   SkewOperator ret{};
   for (const auto &kb1 : o1.ketbras) {
     for (const auto &kb2 : o2.ketbras) {
       SkewOperator o3 = Simplify(Inner(kb1.bra, kb2.ket));
-      SkewOperator o4 = Simplify(Inner(kb2.bra, kb1.ket));
       for (auto &kb3 : o3.ketbras) {
-        for (auto &kb4 : o4.ketbras) {
-          complex coeff = kb1.coeff * kb2.coeff * kb3.coeff * kb4.coeff;
-          if (coeff != 0.0)
-            ret.ketbras.push_back(
-                {kb1.coeff * kb2.coeff * kb3.coeff * kb4.coeff,
-                 Tensor(kb3.ket, kb4.ket), Tensor(kb3.bra, kb4.bra)});
-        }
+        complex coeff = kb1.coeff * kb2.coeff * kb3.coeff;
+        if (coeff != 0.0)
+          ret.ketbras.push_back(
+              {coeff, Tensor(kb3.ket, kb1.ket), Tensor(kb3.bra, kb2.bra)});
       }
     }
   }

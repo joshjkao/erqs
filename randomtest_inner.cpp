@@ -1,6 +1,5 @@
 #include "cxxopts.hpp"
 #include "operations.h"
-// #include "optimization.h"
 #include "quantumstate.h"
 #include "validation.h"
 #include <iostream>
@@ -31,20 +30,30 @@ auto do_test(const TrialArgs &args) -> TrialResult {
 
   auto inner_fast_op = Inner(bra, ket);
   auto inner_slow = Inner_slow(bra, ket);
-  complex inner_fast =
-      (inner_fast_op.ketbras.empty() ? 0.0 : inner_fast_op.ketbras[0].coeff);
+
+  Validate(inner_fast_op, CHECK_ALL);
+
+  complex inner_fast;
+  if (inner_fast_op.ketbras.size() > 2)
+    throw std::runtime_error("skew op isn't a single term");
+  else if (inner_fast_op.ketbras.empty())
+    inner_fast = 0;
+  else if (GetSpace(inner_fast_op.ketbras[0].ket) != QSpace{0})
+    throw std::runtime_error("skewop isn't a number");
+  else if (GetSpace(inner_fast_op.ketbras[0].bra) != QSpace{0})
+    throw std::runtime_error("skewop isn't a number");
+  else
+    inner_fast = inner_fast_op.ketbras[0].coeff;
 
   double real_error =
       std::abs((inner_slow.real() - inner_fast.real()) / inner_slow.real());
   double imag_error =
       std::abs((inner_slow.imag() - inner_fast.imag()) / inner_slow.imag());
 
-  TrialResult result{
-    .inner_fast = inner_fast,
-    .inner_slow = inner_slow,
-    .real_error = real_error,
-    .imag_error = imag_error
-  };
+  TrialResult result{.inner_fast = inner_fast,
+                     .inner_slow = inner_slow,
+                     .real_error = real_error,
+                     .imag_error = imag_error};
 
   return result;
 }
@@ -65,15 +74,11 @@ auto main(int argc, char **argv) -> int {
   size_t max_depth = result["max_depth"].as<size_t>();
   size_t n_terms = result["n_terms"].as<size_t>();
   size_t n_factors = result["n_factors"].as<size_t>();
-  //bool print_state = result["print_state"].as<bool>();
+  // bool print_state = result["print_state"].as<bool>();
 
-  TrialArgs args{.max_depth = max_depth,
-                 .n_terms = n_terms,
-                 .n_factors = n_factors};
+  TrialArgs args{
+      .max_depth = max_depth, .n_terms = n_terms, .n_factors = n_factors};
 
-  #pragma omp parallel for
-  for (auto _: std::views::iota(0, 10)) {
-    auto res = do_test(args);
-    std::cout << res.real_error << " " << res.imag_error << "\n";
-  }
+  auto res = do_test(args);
+  std::cout << res.real_error << " " << res.imag_error << "\n";
 }
