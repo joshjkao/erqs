@@ -40,6 +40,7 @@ SkewOperator Inner(const std::shared_ptr<ProductState> &p1,
                                         .bra = bra_var});
     }
     ret = Multiply(this_bra, ret);
+    ret = Simplify(ret);
   }
   for (const auto &ket_sum : p2->states) {
     SkewOperator this_ket;
@@ -50,6 +51,7 @@ SkewOperator Inner(const std::shared_ptr<ProductState> &p1,
                                         .bra = MakePure(QSpace{0}, QSpace{0})});
     }
     ret = Multiply(ret, this_ket);
+    ret = Simplify(ret);
   }
   return Simplify(ret);
 }
