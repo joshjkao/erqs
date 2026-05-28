@@ -63,20 +63,24 @@ SkewOperator Inner(const std::shared_ptr<ProductState> &p1,
     ret = Multiply(ret, this_ket);
     ret = Simplify(ret);
   }
-  ptr_variant unused_bra_v;
-  if (unused_bras.empty())
-    unused_bra_v = MakePure(QSpace{0}, QSpace{0});
-  else
-    unused_bra_v = MakeProduct(unused_bras);
-  ptr_variant unused_ket_v;
-  if (unused_kets.empty())
-    unused_ket_v = MakePure(QSpace{0}, QSpace{0});
-  else
-    unused_ket_v = MakeProduct(unused_kets);
-  SkewOperator unused;
-  unused.ketbras.push_back(
-      KetBra{.coeff = 1.0, .ket = unused_ket_v, .bra = unused_bra_v});
-  ret = Multiply(ret, unused);
+
+  // unused state skipping
+  if (unused_bras.empty() || unused_kets.empty()) {
+    ptr_variant unused_bra_v;
+    if (unused_bras.empty())
+      unused_bra_v = MakePure(QSpace{0}, QSpace{0});
+    else
+      unused_bra_v = MakeProduct(unused_bras);
+    ptr_variant unused_ket_v;
+    if (unused_kets.empty())
+      unused_ket_v = MakePure(QSpace{0}, QSpace{0});
+    else
+      unused_ket_v = MakeProduct(unused_kets);
+    SkewOperator unused;
+    unused.ketbras.push_back(
+        KetBra{.coeff = 1.0, .ket = unused_ket_v, .bra = unused_bra_v});
+    ret = Multiply(ret, unused);
+  }
   return Simplify(ret);
 }
 
