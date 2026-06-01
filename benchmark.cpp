@@ -5,7 +5,6 @@
 #include <chrono>
 #include <iostream>
 #include <random>
-#include <stdexcept>
 #include <sys/resource.h>
 
 long time_in_ms(auto func) {
@@ -20,8 +19,9 @@ long time_in_ms(auto func) {
 int main(int argc, char **argv) {
   size_t max_depth, n_terms, n_factors, n_bits, h_terms;
 
-  if (argc < 6) {
+  if (argc != 6) {
     std::cout << "not enough arguments\n";
+    std::cout << "expected 6 arguments, got " << argc << "\n";
     return -1;
   }
 
@@ -44,8 +44,10 @@ int main(int argc, char **argv) {
   Simplify(ket);
 
   bool ket_valid = Validate(ket, ValidationArgs{.log_to_stdout = true});
+
   if (!ket_valid) {
-    throw std::runtime_error("state is invalid after simplification");
+    std::cout << "state is invalid after simplification";
+    return -1;
   }
 
   SkewOperator inner;
