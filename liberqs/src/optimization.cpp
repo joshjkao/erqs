@@ -336,7 +336,7 @@ void Normalize_slow(std::shared_ptr<SumState> &root) {
 
 void Normalize(std::shared_ptr<SumState> &root) {
   auto self_inner = Inner(root, root);
-  complex norm = std::sqrt(self_inner.ketbras[0].coeff.real());
+  complex norm = std::sqrt(self_inner[0].coeff.real());
   for (auto &coeff : root->coeffs) {
     coeff /= norm;
   }

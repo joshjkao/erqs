@@ -218,7 +218,7 @@ void PrintToStream(std::ostream &os, const KetBra &kb) {
   os << "|";
 }
 void PrintToStream(std::ostream &os, const SkewOperator &op) {
-  for (const auto &kb : op.ketbras) {
+  for (const auto &kb : op) {
     PrintToStream(os, kb);
     os << "\n";
   }
@@ -644,4 +644,22 @@ bool Equals_literal_flat(const std::shared_ptr<SumState> &sum1,
     return std::abs(coeff1.real() - coeff2.real()) < epsilon &&
            std::abs(coeff1.imag() - coeff2.imag()) < epsilon;
   });
+}
+
+SkewOperator FromKet(std::shared_ptr<SumState> sum) {
+  SkewOperator ret;
+  std::shared_ptr<PureState> zero = MakePure(QSpace{0}, QSpace{0});
+  for (const auto &[coeff, prod] : std::views::zip(sum->coeffs, sum->states)) {
+    ret.AddKetBra({.coeff = coeff, .ket = prod, .bra = zero});
+  }
+  return ret;
+}
+
+SkewOperator FromBra(std::shared_ptr<SumState> sum) {
+  SkewOperator ret;
+  std::shared_ptr<PureState> zero = MakePure(QSpace{0}, QSpace{0});
+  for (const auto &[coeff, prod] : std::views::zip(sum->coeffs, sum->states)) {
+    ret.AddKetBra({.coeff = std::conj(coeff), .ket = zero, .bra = prod});
+  }
+  return ret;
 }

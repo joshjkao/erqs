@@ -161,7 +161,7 @@ bool Validate(const SkewOperator &op, const ValidationArgs &args) {
     ret = false;
   };
 
-  for (const auto &kb : op.ketbras) {
+  for (const auto &kb : op) {
     if (!Validate(kb, args))
       ret = false;
   }
@@ -171,7 +171,7 @@ bool Validate(const SkewOperator &op, const ValidationArgs &args) {
       return (GetSpace(kb.ket) | GetSpace(kb.bra)).none();
     };
     bool has_a_const = false;
-    for (const auto &kb : op.ketbras) {
+    for (const auto &kb : op) {
       if (kb_is_constant(kb) && !has_a_const)
         has_a_const = true;
       else if (kb_is_constant(kb)) {

@@ -74,7 +74,7 @@ int main(int argc, char **argv) {
   std::cout << "\"c_time\": " << inner_time << ",\n";
   std::cout << "\"exp_val_time\": " << exp_val_time << ",\n";
   std::cout << "\"mem_max\": " << usage.ru_maxrss << ",\n";
-  std::cout << "\"resulting_terms\": " << inner.ketbras.size() << ",\n";
-  std::cout << "\"inner\": " << inner.ketbras[0].coeff.real() << "\n";
+  std::cout << "\"resulting_terms\": " << inner.size() << ",\n";
+  std::cout << "\"inner\": " << inner[0].coeff.real() << "\n";
   std::cout << "}\n";
 }

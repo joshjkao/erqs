@@ -62,8 +62,26 @@ struct KetBra {
   ptr_variant bra;
 };
 
-struct SkewOperator {
+class SkewOperator {
+private:
   std::vector<KetBra> ketbras;
+
+public:
+  SkewOperator() = default;
+  SkewOperator(std::vector<KetBra> kbs) : ketbras(kbs) {}
+  void AddKetBra(const KetBra &kb) { ketbras.push_back(kb); }
+  void AddKetBra(KetBra &&kb) { ketbras.emplace_back(kb); }
+
+  auto begin() const { return ketbras.begin(); }
+  auto end() const { return ketbras.end(); }
+  auto begin() { return ketbras.begin(); }
+  auto end() { return ketbras.end(); }
+
+  auto size() const { return ketbras.size(); }
+  auto empty() const { return ketbras.empty(); }
+
+  auto operator[](size_t index) const { return ketbras[index]; }
+  auto operator[](size_t index) -> KetBra & { return ketbras[index]; }
 };
 
 struct PauliOperator {
@@ -105,6 +123,9 @@ std::shared_ptr<SumState> ZeroOneTensor(QSpace space);
 
 PauliHamiltonian RandomHamiltonian(size_t n_terms, QSpace space,
                                    std::mt19937 &gen);
+
+SkewOperator FromKet(std::shared_ptr<SumState> sum);
+SkewOperator FromBra(std::shared_ptr<SumState> sum);
 
 // ---- GETTERS ---- //
 inline const QSpace &GetSpace(const std::shared_ptr<PureState> &ptr) {

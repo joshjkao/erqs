@@ -1,10 +1,8 @@
 #include "operations.h"
 #include "optimization.h"
 #include "quantumstate.h"
-#include "validation.h"
 #include <cassert>
 #include <complex>
-#include <iostream>
 #include <optional>
 #include <ranges>
 #include <unordered_map>
@@ -38,13 +36,7 @@ SkewOperator Inner(const std::shared_ptr<ProductState> &p1,
       unused_bras.push_back(bra_sum);
       continue;
     }
-    SkewOperator this_bra;
-    for (const auto &[bra_var_coeff, bra_var] :
-         std::views::zip(bra_sum->coeffs, bra_sum->states)) {
-      this_bra.ketbras.push_back(KetBra{.coeff = std::conj(bra_var_coeff),
-                                        .ket = MakePure(QSpace{0}, QSpace{0}),
-                                        .bra = bra_var});
-    }
+    SkewOperator this_bra = FromBra(bra_sum);
     ret = Multiply(this_bra, ret);
     ret = Simplify(ret);
   }
@@ -53,13 +45,7 @@ SkewOperator Inner(const std::shared_ptr<ProductState> &p1,
       unused_kets.push_back(ket_sum);
       continue;
     }
-    SkewOperator this_ket;
-    for (const auto &[ket_var_coeff, ket_var] :
-         std::views::zip(ket_sum->coeffs, ket_sum->states)) {
-      this_ket.ketbras.push_back(KetBra{.coeff = ket_var_coeff,
-                                        .ket = ket_var,
-                                        .bra = MakePure(QSpace{0}, QSpace{0})});
-    }
+    SkewOperator this_ket = FromKet(ket_sum);
     ret = Multiply(ret, this_ket);
     ret = Simplify(ret);
   }
@@ -77,7 +63,7 @@ SkewOperator Inner(const std::shared_ptr<ProductState> &p1,
     else
       unused_ket_v = MakeProduct(unused_kets);
     SkewOperator unused;
-    unused.ketbras.push_back(
+    unused.AddKetBra(
         KetBra{.coeff = 1.0, .ket = unused_ket_v, .bra = unused_bra_v});
     ret = Multiply(ret, unused);
   }
@@ -151,7 +137,7 @@ static std::optional<pkb_result> get_pkb_if_pure(const KetBra &kb) {
 SkewOperator Simplify(const SkewOperator &op) {
   SkewOperator ret;
   std::unordered_map<PureKB, complex, KBTupleHash> pures;
-  for (const auto &kb : op.ketbras) {
+  for (const auto &kb : op) {
     auto pure_opt = get_pkb_if_pure(kb);
     if (pure_opt) {
       auto &[coeff, kspace, kbits, bspace, bbits] = pure_opt.value();
@@ -161,7 +147,7 @@ SkewOperator Simplify(const SkewOperator &op) {
         iterator->second += coeff;
       }
     } else {
-      ret.ketbras.push_back(kb);
+      ret.AddKetBra(kb);
     }
   }
   for (const auto &[pkb, coeff] : pures) {
@@ -169,9 +155,9 @@ SkewOperator Simplify(const SkewOperator &op) {
     auto ket = MakePure(kspace, kbits);
     auto bra = MakePure(bspace, bbits);
     KetBra kb{.coeff = coeff, .ket = ket, .bra = bra};
-    ret.ketbras.push_back(kb);
+    ret.AddKetBra(kb);
   }
-  for (auto &[coeff, ket, bra] : ret.ketbras) {
+  for (auto &[coeff, ket, bra] : ret) {
     Simplify(ket);
     Simplify(bra);
   }
@@ -182,44 +168,44 @@ SkewOperator CompressConstants(const SkewOperator &op) {
   SkewOperator ret;
   KetBra constants{
       .coeff = 0.0, .ket = MakePure(0ull, 0ull), .bra = MakePure(0ull, 0ull)};
-  for (const auto &kb : op.ketbras) {
+  for (const auto &kb : op) {
     auto pure_opt = get_pkb_if_pure(kb);
     if (!pure_opt) {
-      ret.ketbras.push_back(kb);
+      ret.AddKetBra(kb);
       continue;
     }
     auto &[coeff, kspace, kbits, bspace, bbits] = pure_opt.value();
     if (kspace.any() || bspace.any()) {
-      ret.ketbras.push_back(kb);
+      ret.AddKetBra(kb);
       continue;
     }
     constants.coeff += coeff;
   }
-  ret.ketbras.push_back(constants);
+  ret.AddKetBra(constants);
   return ret;
 }
 
 void Add(SkewOperator &o1, const SkewOperator &o2) {
-  for (const auto &kb : o2.ketbras) {
-    o1.ketbras.push_back(kb);
+  for (const auto &kb : o2) {
+    o1.AddKetBra(kb);
   }
   o1 = Simplify(o1);
 }
 void Multiply(SkewOperator &o, const complex &c) {
-  for (auto &kb : o.ketbras) {
+  for (auto &kb : o) {
     kb.coeff *= c;
   }
 }
 
 SkewOperator Multiply(const SkewOperator &o1, const SkewOperator &o2) {
   SkewOperator ret{};
-  for (const auto &kb1 : o1.ketbras) {
-    for (const auto &kb2 : o2.ketbras) {
+  for (const auto &kb1 : o1) {
+    for (const auto &kb2 : o2) {
       SkewOperator o3 = Simplify(Inner(kb1.bra, kb2.ket));
-      for (auto &kb3 : o3.ketbras) {
+      for (auto &kb3 : o3) {
         complex coeff = kb1.coeff * kb2.coeff * kb3.coeff;
         if (coeff != 0.0)
-          ret.ketbras.push_back(
+          ret.AddKetBra(
               {coeff, Tensor(kb3.ket, kb1.ket), Tensor(kb3.bra, kb2.bra)});
       }
     }
@@ -332,35 +318,35 @@ std::shared_ptr<SumState> Operate(const PauliHamiltonian &h,
 }
 double Norm(const std::shared_ptr<SumState> &state) {
   SkewOperator inner = Inner(state, state);
-  assert(inner.ketbras.size() == 1);
-  assert(GetSpace(inner.ketbras[0].bra) == QSpace{0});
-  assert(GetSpace(inner.ketbras[0].ket) == QSpace{0});
-  assert(inner.ketbras[0].coeff.imag() <= 1e-6);
-  return inner.ketbras[0].coeff.real();
+  assert(inner.size() == 1);
+  assert(GetSpace(inner[0].bra) == QSpace{0});
+  assert(GetSpace(inner[0].ket) == QSpace{0});
+  assert(inner[0].coeff.imag() <= 1e-6);
+  return inner[0].coeff.real();
 }
 
 double ExpectedValue(const PauliOperator &pauli,
                      const std::shared_ptr<SumState> &state) {
   auto ket = Operate(pauli, state);
   SkewOperator inner = Inner(state, ket);
-  assert(inner.ketbras.size() == 1);
-  assert(GetSpace(inner.ketbras[0].bra) == QSpace{0});
-  assert(GetSpace(inner.ketbras[0].ket) == QSpace{0});
-  return inner.ketbras[0].coeff.real();
+  assert(inner.size() == 1);
+  assert(GetSpace(inner[0].bra) == QSpace{0});
+  assert(GetSpace(inner[0].ket) == QSpace{0});
+  return inner[0].coeff.real();
 }
 double ExpectedValue(const PauliHamiltonian &h,
                      const std::shared_ptr<SumState> &state) {
   auto ket = Operate(h, state);
   SkewOperator inner = Inner(state, ket);
   double self_inner = Norm(state);
-  assert(inner.ketbras.size() == 1 || inner.ketbras.empty());
-  if (inner.ketbras.empty())
+  assert(inner.size() == 1 || inner.empty());
+  if (inner.empty())
     return 0.0;
-  assert(GetSpace(inner.ketbras[0].bra) == QSpace{0});
-  assert(GetSpace(inner.ketbras[0].ket) == QSpace{0});
-  assert(inner.ketbras[0].coeff.imag() <= 1e-6);
+  assert(GetSpace(inner[0].bra) == QSpace{0});
+  assert(GetSpace(inner[0].ket) == QSpace{0});
+  assert(inner[0].coeff.imag() <= 1e-6);
   assert(self_inner != 0.0);
-  return inner.ketbras[0].coeff.real() / self_inner;
+  return inner[0].coeff.real() / self_inner;
 }
 
 double ExpectedValue_slow(const PauliHamiltonian &h,

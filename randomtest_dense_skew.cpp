@@ -80,16 +80,16 @@ auto do_test(const TrialArgs &args) -> TrialResult {
       time_in_ms([&]() { inner_slow = Inner_slow(random_bra, conj_clone); });
 
   complex inner_fast;
-  if (inner_fast_op.ketbras.size() > 2)
+  if (inner_fast_op.size() > 2)
     throw std::runtime_error("skew op isn't a single term");
-  else if (inner_fast_op.ketbras.empty())
+  else if (inner_fast_op.empty())
     inner_fast = 0;
-  else if (GetSpace(inner_fast_op.ketbras[0].ket) != QSpace{0})
+  else if (GetSpace(inner_fast_op[0].ket) != QSpace{0})
     throw std::runtime_error("skewop isn't a number");
-  else if (GetSpace(inner_fast_op.ketbras[0].bra) != QSpace{0})
+  else if (GetSpace(inner_fast_op[0].bra) != QSpace{0})
     throw std::runtime_error("skewop isn't a number");
   else
-    inner_fast = inner_fast_op.ketbras[0].coeff;
+    inner_fast = inner_fast_op[0].coeff;
 
   double real_error =
       std::abs((inner_slow.real() - inner_fast.real()) / inner_slow.real());
