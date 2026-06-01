@@ -1,11 +1,8 @@
 #include "optimization.h"
 #include "operations.h"
 #include "quantumstate.h"
-#include "validation.h"
-// #include <iostream>
 #include <cmath>
 #include <cstddef>
-#include <iostream>
 #include <memory>
 #include <nlopt.hpp>
 #include <optional>

@@ -58,7 +58,6 @@ auto do_test(const TrialArgs &args) -> TrialResult {
     BitString x = random_bitset();
     BitString y = random_bitset() & ~x;
     BitString z = random_bitset() & ~x & ~y;
-    // std::cout << "add a term " << x << " " << y << " " << z << "\n";
     coeffs.push_back(1);
     ops.emplace_back(x, y, z);
   }
