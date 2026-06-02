@@ -1,5 +1,7 @@
 #pragma once
-#include "quantumstate.h"
+#include "hamiltonian.hpp"
+#include "quantumstate.hpp"
+#include "skewoperator.hpp"
 
 struct ValidationArgs {
   bool log_to_stdout = true; // write to std::cout if an error is found

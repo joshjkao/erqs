@@ -1,19 +1,11 @@
 #pragma once
-#include <bitset>
-#include <complex>
+#include "common.hpp"
 #include <functional>
 #include <memory>
 #include <random>
 #include <string_view>
 #include <variant>
 #include <vector>
-
-constexpr size_t NQUBITS = 16;
-
-// ---- BASIC TYPES ---- //
-using complex = std::complex<double>;
-using QSpace = std::bitset<NQUBITS>;
-using BitString = std::bitset<NQUBITS>;
 
 struct PureState;
 struct ProductState;
@@ -55,48 +47,6 @@ struct SumState {
   std::vector<ptr_variant> states;
 };
 
-// ---- INNER PRODUCT TYPES ---- //
-struct KetBra {
-  complex coeff;
-  ptr_variant ket;
-  ptr_variant bra;
-};
-
-class SkewOperator {
-private:
-  std::vector<KetBra> ketbras;
-
-public:
-  SkewOperator() = default;
-  SkewOperator(std::vector<KetBra> kbs) : ketbras(kbs) {}
-  void AddKetBra(const KetBra &kb) { ketbras.push_back(kb); }
-  void AddKetBra(KetBra &&kb) { ketbras.emplace_back(kb); }
-
-  auto begin() const { return ketbras.begin(); }
-  auto end() const { return ketbras.end(); }
-  auto begin() { return ketbras.begin(); }
-  auto end() { return ketbras.end(); }
-
-  auto size() const { return ketbras.size(); }
-  auto empty() const { return ketbras.empty(); }
-
-  auto operator[](size_t index) const { return ketbras[index]; }
-  auto operator[](size_t index) -> KetBra & { return ketbras[index]; }
-};
-
-struct PauliOperator {
-  // assume these are always disjoint
-  // a 1 means that gate acts on that bit
-  BitString x;
-  BitString y;
-  BitString z;
-};
-
-struct PauliHamiltonian {
-  std::vector<double> coeffs;
-  std::vector<PauliOperator> operators;
-};
-
 // ---- FACTORIES ---- //
 std::shared_ptr<PureState> MakePure(auto space, auto bits) {
   return std::make_shared<PureState>(QSpace(space), BitString(bits));
@@ -120,12 +70,6 @@ std::shared_ptr<SumState> RandomSumState(size_t max_depth, size_t n_terms,
                                          std::mt19937 &gen);
 
 std::shared_ptr<SumState> ZeroOneTensor(QSpace space);
-
-PauliHamiltonian RandomHamiltonian(size_t n_terms, QSpace space,
-                                   std::mt19937 &gen);
-
-SkewOperator FromKet(std::shared_ptr<SumState> sum);
-SkewOperator FromBra(std::shared_ptr<SumState> sum);
 
 // ---- GETTERS ---- //
 inline const QSpace &GetSpace(const std::shared_ptr<PureState> &ptr) {
@@ -151,15 +95,10 @@ void PrintToStream(std::ostream &os,
 void PrintToStream(std::ostream &os, const std::shared_ptr<SumState> &sum_ptr,
                    size_t indent = 0);
 void PrintToStream(std::ostream &os, const ptr_variant &ptr, size_t indent = 0);
-void PrintToStream(std::ostream &os, const KetBra &kb);
-void PrintToStream(std::ostream &os, const SkewOperator &op);
 void Print(const std::shared_ptr<PureState> &pure_ptr, size_t indent = 0);
 void Print(const std::shared_ptr<ProductState> &product_ptr, size_t indent = 0);
 void Print(const std::shared_ptr<SumState> &sum_ptr, size_t indent = 0);
 void Print(const ptr_variant &ptr, size_t indent = 0);
-void Print(const KetBra &kb);
-void Print(const SkewOperator &op);
-std::ostream &operator<<(std::ostream &os, const KetBra &kb);
 std::string Stringify(const std::shared_ptr<SumState> &state);
 
 void Flatten(std::shared_ptr<SumState> &root);

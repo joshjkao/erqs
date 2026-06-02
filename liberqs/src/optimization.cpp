@@ -1,6 +1,6 @@
-#include "optimization.h"
-#include "operations.h"
-#include "quantumstate.h"
+#include "optimization.hpp"
+#include "operations.hpp"
+#include "quantumstate.hpp"
 #include <cmath>
 #include <cstddef>
 #include <memory>

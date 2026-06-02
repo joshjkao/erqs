@@ -1,7 +1,7 @@
-#include "operations.h"
-#include "optimization.h"
-#include "quantumstate.h"
-#include "validation.h"
+#include "operations.hpp"
+#include "optimization.hpp"
+#include "quantumstate.hpp"
+#include "validation.hpp"
 #include <chrono>
 #include <iostream>
 #include <memory>

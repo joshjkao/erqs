@@ -1,5 +1,8 @@
 #pragma once
-#include "quantumstate.h"
+#include "common.hpp"
+#include "hamiltonian.hpp"
+#include "quantumstate.hpp"
+#include "skewoperator.hpp"
 
 // ---- INNER PRODUCTS ---- //
 SkewOperator Inner(const std::shared_ptr<PureState> &p1,

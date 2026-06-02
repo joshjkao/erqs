@@ -1,5 +1,6 @@
 #pragma once
-#include "quantumstate.h"
+#include "hamiltonian.hpp"
+#include "quantumstate.hpp"
 #include <memory>
 
 void SetCoefficients(const std::vector<complex> &coeffs,

@@ -1,6 +1,6 @@
-#include "operations.h"
-#include "optimization.h"
-#include "quantumstate.h"
+#include "operations.hpp"
+#include "optimization.hpp"
+#include "quantumstate.hpp"
 #include <cassert>
 #include <complex>
 #include <optional>
@@ -98,28 +98,6 @@ SkewOperator Inner(const std::shared_ptr<SumState> &p1,
   }
   return ret;
 }
-
-// needed to perform compression
-using PureKB = std::tuple<BitString, BitString, BitString, BitString>;
-struct KBTupleHash {
-  std::size_t operator()(const PureKB &t) const {
-    std::size_t seed = 0;
-
-    // Boost's hash_combine algorithm
-    auto hash_combine = [&seed](std::size_t hash_value) {
-      seed ^= hash_value + 0x9e3779b9 + (seed << 6) + (seed >> 2);
-    };
-
-    // 2. Hash the four std::bitset<N> elements
-    std::hash<BitString> bitset_hasher;
-    hash_combine(bitset_hasher(std::get<0>(t)));
-    hash_combine(bitset_hasher(std::get<1>(t)));
-    hash_combine(bitset_hasher(std::get<2>(t)));
-    hash_combine(bitset_hasher(std::get<3>(t)));
-
-    return seed;
-  }
-};
 
 using pkb_result =
     std::tuple<complex, BitString, BitString, BitString, BitString>;

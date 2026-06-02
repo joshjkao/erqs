@@ -1,5 +1,5 @@
-#include "validation.h"
-#include "quantumstate.h"
+#include "validation.hpp"
+#include "quantumstate.hpp"
 #include <iostream>
 #include <memory>
 #include <unordered_set>

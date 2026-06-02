@@ -1,5 +1,4 @@
-#include "quantumstate.h"
-#include "validation.h"
+#include "quantumstate.hpp"
 #include <algorithm>
 #include <cassert>
 #include <functional>
@@ -210,19 +209,6 @@ void PrintToStream(std::ostream &os, const std::shared_ptr<SumState> &sum_ptr,
 void PrintToStream(std::ostream &os, const ptr_variant &ptr, size_t indent) {
   std::visit([&](const auto &p) { PrintToStream(os, p, indent); }, ptr);
 }
-void PrintToStream(std::ostream &os, const KetBra &kb) {
-  os << kb.coeff << "|";
-  std::visit([&](const auto e) { PrintToStream(os, e, 2); }, kb.ket);
-  os << "><";
-  std::visit([&](const auto e) { PrintToStream(os, e, 2); }, kb.bra);
-  os << "|";
-}
-void PrintToStream(std::ostream &os, const SkewOperator &op) {
-  for (const auto &kb : op) {
-    PrintToStream(os, kb);
-    os << "\n";
-  }
-}
 
 void Print(const std::shared_ptr<PureState> &pure_ptr, size_t) {
   PrintToStream(std::cout, pure_ptr);
@@ -236,12 +222,7 @@ void Print(const std::shared_ptr<SumState> &sum_ptr, size_t indent) {
 void Print(const ptr_variant &ptr, size_t indent) {
   PrintToStream(std::cout, ptr, indent);
 }
-void Print(const KetBra &kb) { PrintToStream(std::cout, kb); }
-void Print(const SkewOperator &op) { PrintToStream(std::cout, op); }
-std::ostream &operator<<(std::ostream &os, const KetBra &kb) {
-  PrintToStream(os, kb);
-  return os;
-}
+
 std::string Stringify(const std::shared_ptr<SumState> &state) {
   std::stringstream ss{};
   PrintToStream(ss, state);
@@ -405,36 +386,6 @@ ptr_variant RandomProductState(size_t max_depth, size_t n_terms,
                                size_t n_factors, QSpace space,
                                std::mt19937 &gen) {
   return random_product(max_depth, n_terms, n_factors, space, gen);
-}
-
-PauliHamiltonian RandomHamiltonian(size_t n_terms, QSpace space,
-                                   std::mt19937 &gen) {
-  auto random_bitset = [&]() -> BitString {
-    std::bernoulli_distribution dist{0.5};
-    BitString bits;
-    for (size_t i = 0; i < NQUBITS; ++i) {
-      bits[i] = dist(gen);
-    }
-    return bits & space;
-  };
-
-  std::vector<double> coeffs;
-  std::vector<PauliOperator> ops;
-
-  for (auto _ : std::views::iota(0uz, n_terms)) {
-    BitString x = random_bitset();
-    BitString y = random_bitset() & ~x;
-    BitString z = random_bitset() & ~x & ~y;
-    coeffs.push_back(1);
-    ops.emplace_back(x, y, z);
-  }
-
-  PauliHamiltonian H{coeffs, ops};
-  if (!Validate(H, CHECK_ALL)) {
-    throw std::runtime_error("invalid hamiltonian");
-  }
-
-  return H;
 }
 
 std::shared_ptr<SumState> ZeroOneTensor(QSpace space) {
@@ -644,22 +595,4 @@ bool Equals_literal_flat(const std::shared_ptr<SumState> &sum1,
     return std::abs(coeff1.real() - coeff2.real()) < epsilon &&
            std::abs(coeff1.imag() - coeff2.imag()) < epsilon;
   });
-}
-
-SkewOperator FromKet(std::shared_ptr<SumState> sum) {
-  SkewOperator ret;
-  std::shared_ptr<PureState> zero = MakePure(QSpace{0}, QSpace{0});
-  for (const auto &[coeff, prod] : std::views::zip(sum->coeffs, sum->states)) {
-    ret.AddKetBra({.coeff = coeff, .ket = prod, .bra = zero});
-  }
-  return ret;
-}
-
-SkewOperator FromBra(std::shared_ptr<SumState> sum) {
-  SkewOperator ret;
-  std::shared_ptr<PureState> zero = MakePure(QSpace{0}, QSpace{0});
-  for (const auto &[coeff, prod] : std::views::zip(sum->coeffs, sum->states)) {
-    ret.AddKetBra({.coeff = std::conj(coeff), .ket = zero, .bra = prod});
-  }
-  return ret;
 }
