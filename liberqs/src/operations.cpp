@@ -3,7 +3,6 @@
 #include "quantumstate.hpp"
 #include <cassert>
 #include <complex>
-#include <optional>
 #include <ranges>
 #include <unordered_map>
 #include <variant>
@@ -97,98 +96,6 @@ SkewOperator Inner(const std::shared_ptr<SumState> &p1,
     }
   }
   return ret;
-}
-
-using pkb_result =
-    std::tuple<complex, BitString, BitString, BitString, BitString>;
-static std::optional<pkb_result> get_pkb_if_pure(const KetBra &kb) {
-  auto ket_ptr_ptr = std::get_if<std::shared_ptr<PureState>>(&kb.ket);
-  auto bra_ptr_ptr = std::get_if<std::shared_ptr<PureState>>(&kb.bra);
-  if (ket_ptr_ptr && bra_ptr_ptr) {
-    pkb_result res{kb.coeff, (*ket_ptr_ptr)->space, (*ket_ptr_ptr)->bits,
-                   (*bra_ptr_ptr)->space, (*bra_ptr_ptr)->bits};
-    return res;
-  }
-  return std::nullopt;
-}
-
-SkewOperator Simplify(const SkewOperator &op) {
-  SkewOperator ret;
-  std::unordered_map<PureKB, complex, KBTupleHash> pures;
-  for (const auto &kb : op) {
-    auto pure_opt = get_pkb_if_pure(kb);
-    if (pure_opt) {
-      auto &[coeff, kspace, kbits, bspace, bbits] = pure_opt.value();
-      PureKB pkb{kspace, kbits, bspace, bbits};
-      auto [iterator, inserted] = pures.insert({pkb, coeff});
-      if (!inserted) {
-        iterator->second += coeff;
-      }
-    } else {
-      ret.AddKetBra(kb);
-    }
-  }
-  for (const auto &[pkb, coeff] : pures) {
-    auto &[kspace, kbits, bspace, bbits] = pkb;
-    auto ket = MakePure(kspace, kbits);
-    auto bra = MakePure(bspace, bbits);
-    KetBra kb{.coeff = coeff, .ket = ket, .bra = bra};
-    ret.AddKetBra(kb);
-  }
-  for (auto &[coeff, ket, bra] : ret) {
-    Simplify(ket);
-    Simplify(bra);
-  }
-  return ret;
-}
-
-SkewOperator CompressConstants(const SkewOperator &op) {
-  SkewOperator ret;
-  KetBra constants{
-      .coeff = 0.0, .ket = MakePure(0ull, 0ull), .bra = MakePure(0ull, 0ull)};
-  for (const auto &kb : op) {
-    auto pure_opt = get_pkb_if_pure(kb);
-    if (!pure_opt) {
-      ret.AddKetBra(kb);
-      continue;
-    }
-    auto &[coeff, kspace, kbits, bspace, bbits] = pure_opt.value();
-    if (kspace.any() || bspace.any()) {
-      ret.AddKetBra(kb);
-      continue;
-    }
-    constants.coeff += coeff;
-  }
-  ret.AddKetBra(constants);
-  return ret;
-}
-
-void Add(SkewOperator &o1, const SkewOperator &o2) {
-  for (const auto &kb : o2) {
-    o1.AddKetBra(kb);
-  }
-  o1 = Simplify(o1);
-}
-void Multiply(SkewOperator &o, const complex &c) {
-  for (auto &kb : o) {
-    kb.coeff *= c;
-  }
-}
-
-SkewOperator Multiply(const SkewOperator &o1, const SkewOperator &o2) {
-  SkewOperator ret{};
-  for (const auto &kb1 : o1) {
-    for (const auto &kb2 : o2) {
-      SkewOperator o3 = Simplify(Inner(kb1.bra, kb2.ket));
-      for (auto &kb3 : o3) {
-        complex coeff = kb1.coeff * kb2.coeff * kb3.coeff;
-        if (coeff != 0.0)
-          ret.AddKetBra(
-              {coeff, Tensor(kb3.ket, kb1.ket), Tensor(kb3.bra, kb2.bra)});
-      }
-    }
-  }
-  return Simplify(ret);
 }
 
 static ptr_variant tensor(const std::shared_ptr<PureState> &p1,

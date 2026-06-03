@@ -16,12 +16,6 @@ SkewOperator Inner(const std::shared_ptr<PureState> &p1,
 SkewOperator Inner(const ptr_variant &p1, const ptr_variant &p2);
 SkewOperator Inner(const std::shared_ptr<SumState> &p1,
                    const std::shared_ptr<SumState> &p2);
-SkewOperator CompressConstants(const SkewOperator &op);
-SkewOperator Simplify(const SkewOperator &op);
-
-void Add(SkewOperator &o1, const SkewOperator &o2);
-void Multiply(SkewOperator &o, const complex &c);
-SkewOperator Multiply(const SkewOperator &o1, const SkewOperator &o2);
 
 ptr_variant Tensor(const ptr_variant &p1, const ptr_variant &p2);
 std::shared_ptr<SumState> Tensor(const std::shared_ptr<SumState> &p1,

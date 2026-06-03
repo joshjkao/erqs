@@ -508,3 +508,67 @@ void SquashPures(std::shared_ptr<SumState> &root) {
     sum->states = states_new;
   }
 }
+
+using pkb_result =
+    std::tuple<complex, BitString, BitString, BitString, BitString>;
+static std::optional<pkb_result> get_pkb_if_pure(const KetBra &kb) {
+  auto ket_ptr_ptr = std::get_if<std::shared_ptr<PureState>>(&kb.ket);
+  auto bra_ptr_ptr = std::get_if<std::shared_ptr<PureState>>(&kb.bra);
+  if (ket_ptr_ptr && bra_ptr_ptr) {
+    pkb_result res{kb.coeff, (*ket_ptr_ptr)->space, (*ket_ptr_ptr)->bits,
+                   (*bra_ptr_ptr)->space, (*bra_ptr_ptr)->bits};
+    return res;
+  }
+  return std::nullopt;
+}
+
+SkewOperator CompressConstants(const SkewOperator &op) {
+  SkewOperator ret;
+  KetBra constants{
+      .coeff = 0.0, .ket = MakePure(0ull, 0ull), .bra = MakePure(0ull, 0ull)};
+  for (const auto &kb : op) {
+    auto pure_opt = get_pkb_if_pure(kb);
+    if (!pure_opt) {
+      ret.AddKetBra(kb);
+      continue;
+    }
+    auto &[coeff, kspace, kbits, bspace, bbits] = pure_opt.value();
+    if (kspace.any() || bspace.any()) {
+      ret.AddKetBra(kb);
+      continue;
+    }
+    constants.coeff += coeff;
+  }
+  ret.AddKetBra(constants);
+  return ret;
+}
+
+SkewOperator Simplify(const SkewOperator &op) {
+  SkewOperator ret;
+  std::unordered_map<PureKB, complex, KBTupleHash> pures;
+  for (const auto &kb : op) {
+    auto pure_opt = get_pkb_if_pure(kb);
+    if (pure_opt) {
+      auto &[coeff, kspace, kbits, bspace, bbits] = pure_opt.value();
+      PureKB pkb{kspace, kbits, bspace, bbits};
+      auto [iterator, inserted] = pures.insert({pkb, coeff});
+      if (!inserted) {
+        iterator->second += coeff;
+      }
+    } else {
+      ret.AddKetBra(kb);
+    }
+  }
+  for (const auto &[pkb, coeff] : pures) {
+    auto &[kspace, kbits, bspace, bbits] = pkb;
+    auto ket = MakePure(kspace, kbits);
+    auto bra = MakePure(bspace, bbits);
+    KetBra kb{.coeff = coeff, .ket = ket, .bra = bra};
+    ret.AddKetBra(kb);
+  }
+  for (auto &[coeff, ket, bra] : ret) {
+    Simplify(ket);
+    Simplify(bra);
+  }
+  return ret;
+}

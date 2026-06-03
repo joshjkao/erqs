@@ -33,13 +33,14 @@ struct KBTupleHash {
 class SkewOperator {
 private:
   std::vector<KetBra> ketbras;
+  size_t n_kbs{0uz};
 
 public:
   SkewOperator() = default;
-  SkewOperator(std::vector<KetBra> kbs) : ketbras(kbs) {}
+  SkewOperator(std::vector<KetBra> kbs) : ketbras(kbs), n_kbs{0uz} {}
 
-  void AddKetBra(const KetBra &kb) { ketbras.push_back(kb); }
-  void AddKetBra(KetBra &&kb) { ketbras.emplace_back(kb); }
+  void AddKetBra(const KetBra &kb);
+  void AddKetBra(KetBra &&kb);
 
   auto begin() const { return ketbras.begin(); }
   auto begin() { return ketbras.begin(); }
@@ -61,3 +62,7 @@ void PrintToStream(std::ostream &os, const SkewOperator &op);
 void Print(const KetBra &kb);
 void Print(const SkewOperator &op);
 std::ostream &operator<<(std::ostream &os, const KetBra &kb);
+
+void Add(SkewOperator &o1, const SkewOperator &o2);
+void Multiply(SkewOperator &o, const complex &c);
+SkewOperator Multiply(const SkewOperator &o1, const SkewOperator &o2);
