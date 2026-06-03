@@ -3,10 +3,6 @@
 #include <random>
 #include <vector>
 
-struct PureState;
-struct ProductState;
-struct SumState;
-
 struct PauliOperator {
   // assume these are always disjoint
   // a 1 means that gate acts on that bit

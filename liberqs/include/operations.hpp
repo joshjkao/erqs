@@ -1,7 +1,6 @@
 #pragma once
 #include "common.hpp"
 #include "hamiltonian.hpp"
-#include "quantumstate.hpp"
 #include "skewoperator.hpp"
 
 // ---- INNER PRODUCTS ---- //

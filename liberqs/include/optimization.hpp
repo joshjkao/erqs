@@ -1,6 +1,5 @@
 #pragma once
 #include "hamiltonian.hpp"
-#include "quantumstate.hpp"
 #include "skewoperator.hpp"
 #include <memory>
 
