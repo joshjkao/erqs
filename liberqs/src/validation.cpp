@@ -1,5 +1,5 @@
-#include "validation.h"
-#include "quantumstate.h"
+#include "validation.hpp"
+#include "quantumstate.hpp"
 #include <iostream>
 #include <memory>
 #include <unordered_set>
@@ -155,13 +155,15 @@ bool Validate(const KetBra &kb, const ValidationArgs &args) {
 
 bool Validate(const SkewOperator &op, const ValidationArgs &args) {
   bool ret = true;
+  if (op.empty())
+    return ret;
   auto handle_error = [&](const std::string &msg) {
     if (args.log_to_stdout)
       std::cout << msg << "\n";
     ret = false;
   };
 
-  for (const auto &kb : op.ketbras) {
+  for (const auto &kb : op) {
     if (!Validate(kb, args))
       ret = false;
   }
@@ -171,7 +173,7 @@ bool Validate(const SkewOperator &op, const ValidationArgs &args) {
       return (GetSpace(kb.ket) | GetSpace(kb.bra)).none();
     };
     bool has_a_const = false;
-    for (const auto &kb : op.ketbras) {
+    for (const auto &kb : op) {
       if (kb_is_constant(kb) && !has_a_const)
         has_a_const = true;
       else if (kb_is_constant(kb)) {
@@ -181,6 +183,16 @@ bool Validate(const SkewOperator &op, const ValidationArgs &args) {
   }
   if (args.check_skewop_redundant_pures) {
     // todo
+  }
+  if (args.check_skewop_subspaces) {
+    QSpace bspace = op.GetBraSpace();
+    QSpace kspace = op.GetKetSpace();
+    for (const auto &kb : op) {
+      if (GetSpace(kb.bra) != bspace)
+        handle_error("skewoperator bra space doesn't match");
+      if (GetSpace(kb.ket) != kspace)
+        handle_error("skewoperator ket space doesn't match");
+    }
   }
 
   return ret;

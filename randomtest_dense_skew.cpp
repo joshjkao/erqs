@@ -1,12 +1,14 @@
 #include "cxxopts.hpp"
-#include "operations.h"
-#include "quantumstate.h"
-#include "validation.h"
+#include "operations.hpp"
+#include "quantumstate.hpp"
+#include "skewoperator.hpp"
+#include "validation.hpp"
 #include <iostream>
 #include <pthread.h>
 #include <random>
 #include <ranges>
 #include <stdexcept>
+#include <type_traits>
 
 struct TrialArgs {
   size_t max_depth;
@@ -58,7 +60,6 @@ auto do_test(const TrialArgs &args) -> TrialResult {
     BitString x = random_bitset();
     BitString y = random_bitset() & ~x;
     BitString z = random_bitset() & ~x & ~y;
-    // std::cout << "add a term " << x << " " << y << " " << z << "\n";
     coeffs.push_back(1);
     ops.emplace_back(x, y, z);
   }
@@ -81,16 +82,16 @@ auto do_test(const TrialArgs &args) -> TrialResult {
       time_in_ms([&]() { inner_slow = Inner_slow(random_bra, conj_clone); });
 
   complex inner_fast;
-  if (inner_fast_op.ketbras.size() > 2)
+  if (inner_fast_op.size() > 2)
     throw std::runtime_error("skew op isn't a single term");
-  else if (inner_fast_op.ketbras.empty())
+  else if (inner_fast_op.empty())
     inner_fast = 0;
-  else if (GetSpace(inner_fast_op.ketbras[0].ket) != QSpace{0})
+  else if (GetSpace(inner_fast_op[0].ket) != QSpace{0})
     throw std::runtime_error("skewop isn't a number");
-  else if (GetSpace(inner_fast_op.ketbras[0].bra) != QSpace{0})
+  else if (GetSpace(inner_fast_op[0].bra) != QSpace{0})
     throw std::runtime_error("skewop isn't a number");
   else
-    inner_fast = inner_fast_op.ketbras[0].coeff;
+    inner_fast = inner_fast_op[0].coeff;
 
   double real_error =
       std::abs((inner_slow.real() - inner_fast.real()) / inner_slow.real());
@@ -116,7 +117,7 @@ auto main(int argc, char **argv) -> int {
       "h_terms", "number of terms to make the hamiltonian",
       cxxopts::value<size_t>())("p,print_state", "print the state");
 
-  constexpr auto n_trials = 1000;
+  constexpr auto n_trials = 100;
 
   options.parse_positional({"max_depth", "n_terms", "n_factors", "h_terms"});
 

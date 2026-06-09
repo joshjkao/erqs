@@ -1,5 +1,7 @@
 #pragma once
-#include "quantumstate.h"
+#include "hamiltonian.hpp"
+#include "quantumstate.hpp"
+#include "skewoperator.hpp"
 
 struct ValidationArgs {
   bool log_to_stdout = true; // write to std::cout if an error is found
@@ -19,6 +21,7 @@ struct ValidationArgs {
 
   bool check_skewop_redundant_constants = true;
   bool check_skewop_redundant_pures = true;
+  bool check_skewop_subspaces = true;
 
   bool check_pauliop_disjoint = true;
   bool check_hamiltonian_list_sizes = true;

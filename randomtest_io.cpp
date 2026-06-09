@@ -1,9 +1,9 @@
 
 #include "cxxopts.hpp"
-#include "operations.h"
+#include "operations.hpp"
 // #include "optimization.h"
-#include "quantumstate.h"
-#include "validation.h"
+#include "quantumstate.hpp"
+#include "validation.hpp"
 #include <iostream>
 #include <random>
 
