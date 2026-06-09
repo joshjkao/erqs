@@ -1,6 +1,5 @@
 #pragma once
-#include "hamiltonian.hpp"
-#include "skewoperator.hpp"
+#include "quantumstate.h"
 #include <memory>
 
 void SetCoefficients(const std::vector<complex> &coeffs,
@@ -34,6 +33,3 @@ void SquashPures(std::shared_ptr<SumState> &root);
 
 void Simplify(ptr_variant &var);
 void Simplify(std::shared_ptr<SumState> &ptr);
-
-SkewOperator Simplify(const SkewOperator &op);
-SkewOperator CompressConstants(const SkewOperator &op);

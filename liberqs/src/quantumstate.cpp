@@ -1,4 +1,4 @@
-#include "quantumstate.hpp"
+#include "quantumstate.h"
 #include <algorithm>
 #include <cassert>
 #include <functional>
@@ -209,6 +209,19 @@ void PrintToStream(std::ostream &os, const std::shared_ptr<SumState> &sum_ptr,
 void PrintToStream(std::ostream &os, const ptr_variant &ptr, size_t indent) {
   std::visit([&](const auto &p) { PrintToStream(os, p, indent); }, ptr);
 }
+void PrintToStream(std::ostream &os, const KetBra &kb) {
+  os << kb.coeff << "|";
+  std::visit([&](const auto e) { PrintToStream(os, e, 2); }, kb.ket);
+  os << "><";
+  std::visit([&](const auto e) { PrintToStream(os, e, 2); }, kb.bra);
+  os << "|";
+}
+void PrintToStream(std::ostream &os, const SkewOperator &op) {
+  for (const auto &kb : op.ketbras) {
+    PrintToStream(os, kb);
+    os << "\n";
+  }
+}
 
 void Print(const std::shared_ptr<PureState> &pure_ptr, size_t) {
   PrintToStream(std::cout, pure_ptr);
@@ -222,7 +235,12 @@ void Print(const std::shared_ptr<SumState> &sum_ptr, size_t indent) {
 void Print(const ptr_variant &ptr, size_t indent) {
   PrintToStream(std::cout, ptr, indent);
 }
-
+void Print(const KetBra &kb) { PrintToStream(std::cout, kb); }
+void Print(const SkewOperator &op) { PrintToStream(std::cout, op); }
+std::ostream &operator<<(std::ostream &os, const KetBra &kb) {
+  PrintToStream(os, kb);
+  return os;
+}
 std::string Stringify(const std::shared_ptr<SumState> &state) {
   std::stringstream ss{};
   PrintToStream(ss, state);

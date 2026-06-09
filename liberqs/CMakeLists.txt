@@ -9,11 +9,9 @@ set(CMAKE_CXX_FLAGS_RELEASE "-g -Wall -Wextra -Werror -O2")
 project(liberqs)
 
 add_library(erqs
-  src/hamiltonian.cpp
+  src/quantumstate.cpp
   src/operations.cpp
   src/optimization.cpp
-  src/quantumstate.cpp
-  src/skewoperator.cpp
   src/validation.cpp
 )
 

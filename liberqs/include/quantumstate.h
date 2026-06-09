@@ -1,11 +1,19 @@
 #pragma once
-#include "common.hpp"
+#include <bitset>
+#include <complex>
 #include <functional>
 #include <memory>
 #include <random>
 #include <string_view>
 #include <variant>
 #include <vector>
+
+constexpr size_t NQUBITS = 16;
+
+// ---- BASIC TYPES ---- //
+using complex = std::complex<double>;
+using QSpace = std::bitset<NQUBITS>;
+using BitString = std::bitset<NQUBITS>;
 
 struct PureState;
 struct ProductState;
@@ -45,6 +53,30 @@ struct SumState {
   QSpace space;
   std::vector<complex> coeffs;
   std::vector<ptr_variant> states;
+};
+
+// ---- INNER PRODUCT TYPES ---- //
+struct KetBra {
+  complex coeff;
+  ptr_variant ket;
+  ptr_variant bra;
+};
+
+struct SkewOperator {
+  std::vector<KetBra> ketbras;
+};
+
+struct PauliOperator {
+  // assume these are always disjoint
+  // a 1 means that gate acts on that bit
+  BitString x;
+  BitString y;
+  BitString z;
+};
+
+struct PauliHamiltonian {
+  std::vector<double> coeffs;
+  std::vector<PauliOperator> operators;
 };
 
 // ---- FACTORIES ---- //
@@ -95,10 +127,15 @@ void PrintToStream(std::ostream &os,
 void PrintToStream(std::ostream &os, const std::shared_ptr<SumState> &sum_ptr,
                    size_t indent = 0);
 void PrintToStream(std::ostream &os, const ptr_variant &ptr, size_t indent = 0);
+void PrintToStream(std::ostream &os, const KetBra &kb);
+void PrintToStream(std::ostream &os, const SkewOperator &op);
 void Print(const std::shared_ptr<PureState> &pure_ptr, size_t indent = 0);
 void Print(const std::shared_ptr<ProductState> &product_ptr, size_t indent = 0);
 void Print(const std::shared_ptr<SumState> &sum_ptr, size_t indent = 0);
 void Print(const ptr_variant &ptr, size_t indent = 0);
+void Print(const KetBra &kb);
+void Print(const SkewOperator &op);
+std::ostream &operator<<(std::ostream &os, const KetBra &kb);
 std::string Stringify(const std::shared_ptr<SumState> &state);
 
 void Flatten(std::shared_ptr<SumState> &root);

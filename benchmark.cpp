@@ -1,7 +1,7 @@
-#include "operations.hpp"
-#include "optimization.hpp"
-#include "quantumstate.hpp"
-#include "validation.hpp"
+#include "operations.h"
+#include "optimization.h"
+#include "quantumstate.h"
+#include "validation.h"
 #include <chrono>
 #include <iostream>
 #include <random>
@@ -17,11 +17,10 @@ long time_in_ms(auto func) {
 }
 
 int main(int argc, char **argv) {
-  size_t max_depth, n_terms, n_factors, n_bits, h_terms;
+  size_t max_depth, n_terms, n_factors, n_bits;
 
-  if (argc != 6) {
+  if (argc < 5) {
     std::cout << "not enough arguments\n";
-    std::cout << "expected 6 arguments, got " << argc << "\n";
     return -1;
   }
 
@@ -29,7 +28,6 @@ int main(int argc, char **argv) {
   n_terms = static_cast<size_t>(atoi(argv[2]));
   n_factors = static_cast<size_t>(atoi(argv[3]));
   n_bits = static_cast<size_t>(atoi(argv[4]));
-  h_terms = static_cast<size_t>(atoi(argv[5]));
 
   size_t bit_mask = 0;
   for (size_t i = 0; i < n_bits; ++i) {
@@ -38,7 +36,7 @@ int main(int argc, char **argv) {
 
   std::random_device rd{};
   std::mt19937 gen{rd()};
-  auto ket =
+  auto root =
       RandomSumState(max_depth, n_terms, n_factors, QSpace{bit_mask}, gen);
   auto clone2 = Clone(root);
 

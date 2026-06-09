@@ -5,7 +5,7 @@ from concurrent.futures import ProcessPoolExecutor
 from itertools import product
 
 
-def run_benchmark(max_depth, n_terms, n_factors, n_bits, h_terms):
+def run_benchark(max_depth, n_terms, n_factors, n_bits):
     # Construct the command line arguments
     # Ensure all arguments are strings
     cmd = [
@@ -14,7 +14,6 @@ def run_benchmark(max_depth, n_terms, n_factors, n_bits, h_terms):
         str(n_terms),
         str(n_factors),
         str(n_bits),
-        str(h_terms),
     ]
 
     # Run the process and capture stdout
@@ -34,14 +33,13 @@ def run_benchmark(max_depth, n_terms, n_factors, n_bits, h_terms):
 # 1. Helper function to handle a single task
 def run_single_benchmark(args):
     # Unpack the parameters
-    max_depth, n_factors, n_terms, n_bits, h_terms = args
+    max_depth, n_factors, n_terms, n_bits = args
     # Call your existing C++ wrapper
-    return run_benchmark(max_depth, n_terms, n_factors, n_bits, h_terms)
+    return run_benchark(max_depth, n_terms, n_factors, n_bits)
 
 
 def run_all_parallel():
     n_bits = 10
-    h_terms = 5
     n_trials = 1000
 
     # 2. Generate all combinations of parameters (The "Flattening")
@@ -51,7 +49,6 @@ def run_all_parallel():
         range(3, 8),  # n_factors
         range(3, 8),  # n_terms
         [n_bits],
-        [h_terms],
     )
 
     # Repeat the combinations for the number of trials
@@ -73,18 +70,15 @@ def run_all_parallel():
 def run_all():
     results = []
     n_bits = 10
-    h_terms = 5
-    n_trials = 100
-    for max_depth in range(3, 6):
-        for n_factors in range(3, 6):
-            for n_terms in range(3, 6):
+    n_trials = 1000
+    for max_depth in range(3, 7):
+        for n_factors in range(3, 7):
+            for n_terms in range(3, 7):
                 for trial in range(n_trials):
                     print(
-                        f"trial {trial} for max_depth: {max_depth}, n_terms: {n_terms}, n_factors: {n_factors}, h_terms: {h_terms}"
+                        f"trial {trial} for max_depth: {max_depth}, n_terms: {n_terms}, n_factors: {n_factors}"
                     )
-                    result = run_benchmark(
-                        max_depth, n_terms, n_factors, n_bits, h_terms
-                    )
+                    result = run_benchark(max_depth, n_terms, n_factors, n_bits)
                     results.append(result)
 
     df = pd.DataFrame(results)
@@ -93,8 +87,8 @@ def run_all():
 
 
 def main():
-    run_all()
-    # run_all_parallel()
+    # run_all()
+    run_all_parallel()
 
 
 if __name__ == "__main__":
