@@ -568,7 +568,17 @@ SkewOperator Simplify(const SkewOperator &op) {
   }
   for (auto &[coeff, ket, bra] : ret) {
     Simplify(ket);
+    if (auto pket = ExtractPure(ket)) {
+      auto [c, space, bits] = *pket;
+      coeff *= c;
+      ket = MakePure(space, bits);
+    }
     Simplify(bra);
+    if (auto pbra = ExtractPure(bra)) {
+      auto [c, space, bits] = *pbra;
+      coeff *= std::conj(c);
+      bra = MakePure(space, bits);
+    }
   }
   return ret;
 }

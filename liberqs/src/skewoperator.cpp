@@ -2,6 +2,7 @@
 #include "operations.hpp"
 #include "optimization.hpp"
 #include "quantumstate.hpp"
+#include <cassert>
 #include <iostream>
 #include <ranges>
 
@@ -20,6 +21,19 @@ SkewOperator FromBra(std::shared_ptr<SumState> sum) {
   for (const auto &[coeff, prod] : std::views::zip(sum->coeffs, sum->states)) {
     ret.AddKetBra({.coeff = std::conj(coeff), .ket = zero, .bra = prod});
   }
+  return ret;
+}
+SkewOperator FromKet(std::shared_ptr<ProductState> prod) {
+  SkewOperator ret;
+  ret.AddKetBra(
+      {.coeff = 1, .ket = prod, .bra = MakePure(QSpace(0), QSpace(0))});
+  return ret;
+}
+
+SkewOperator FromBra(std::shared_ptr<ProductState> prod) {
+  SkewOperator ret;
+  ret.AddKetBra(
+      {.coeff = 1, .ket = MakePure(QSpace(0), QSpace(0)), .bra = prod});
   return ret;
 }
 
@@ -58,6 +72,8 @@ void SkewOperator::AddKetBra(KetBra &&kb) {
 }
 
 void Add(SkewOperator &o1, const SkewOperator &o2) {
+  // assert(o1.GetBraSpace() == o1.GetBraSpace());
+  // assert(o2.GetBraSpace() == o2.GetKetSpace());
   for (const auto &kb : o2) {
     o1.AddKetBra(kb);
   }

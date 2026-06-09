@@ -155,6 +155,8 @@ bool Validate(const KetBra &kb, const ValidationArgs &args) {
 
 bool Validate(const SkewOperator &op, const ValidationArgs &args) {
   bool ret = true;
+  if (op.empty())
+    return ret;
   auto handle_error = [&](const std::string &msg) {
     if (args.log_to_stdout)
       std::cout << msg << "\n";
@@ -181,6 +183,16 @@ bool Validate(const SkewOperator &op, const ValidationArgs &args) {
   }
   if (args.check_skewop_redundant_pures) {
     // todo
+  }
+  if (args.check_skewop_subspaces) {
+    QSpace bspace = op.GetBraSpace();
+    QSpace kspace = op.GetKetSpace();
+    for (const auto &kb : op) {
+      if (GetSpace(kb.bra) != bspace)
+        handle_error("skewoperator bra space doesn't match");
+      if (GetSpace(kb.ket) != kspace)
+        handle_error("skewoperator ket space doesn't match");
+    }
   }
 
   return ret;

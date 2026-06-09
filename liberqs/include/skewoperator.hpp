@@ -1,5 +1,6 @@
 #pragma once
 #include "common.hpp"
+#include "quantumstate.hpp"
 #include <vector>
 
 struct KetBra {
@@ -49,6 +50,16 @@ public:
 
   auto size() const { return ketbras.size(); }
   auto empty() const { return ketbras.empty(); }
+  auto GetKetSpace() const {
+    if (empty())
+      return QSpace{0};
+    return GetSpace(ketbras[0].ket);
+  }
+  auto GetBraSpace() const {
+    if (empty())
+      return QSpace{0};
+    return GetSpace(ketbras[0].bra);
+  }
 
   auto operator[](size_t index) const { return ketbras[index]; }
   auto operator[](size_t index) -> KetBra & { return ketbras[index]; }
@@ -56,6 +67,9 @@ public:
 
 SkewOperator FromKet(std::shared_ptr<SumState> sum);
 SkewOperator FromBra(std::shared_ptr<SumState> sum);
+
+SkewOperator FromKet(std::shared_ptr<ProductState> prod);
+SkewOperator FromBra(std::shared_ptr<ProductState> prod);
 
 void PrintToStream(std::ostream &os, const KetBra &kb);
 void PrintToStream(std::ostream &os, const SkewOperator &op);

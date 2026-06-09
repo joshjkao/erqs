@@ -21,6 +21,7 @@ struct ValidationArgs {
 
   bool check_skewop_redundant_constants = true;
   bool check_skewop_redundant_pures = true;
+  bool check_skewop_subspaces = true;
 
   bool check_pauliop_disjoint = true;
   bool check_hamiltonian_list_sizes = true;
