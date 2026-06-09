@@ -1,13 +1,16 @@
-#include "operations.hpp"
-#include "optimization.hpp"
-#include "quantumstate.hpp"
-#include "validation.hpp"
+#include "operations.h"
+#include "optimization.h"
+#include "quantumstate.h"
+#include "validation.h"
 #include <chrono>
+// #include <iostream>
+#include <cmath>
 #include <iostream>
 #include <memory>
 #include <print>
 #include <random>
 #include <ranges>
+#include <variant>
 
 long time_in_ms(auto func) {
   auto start = std::chrono::high_resolution_clock::now();
@@ -35,8 +38,7 @@ int main() {
   auto seed = rd();
   std::mt19937 gen{seed};
   // auto root = RandomSumState(3, 2, 2, QSpace{"1111"}, gen);
-  QSpace space{"1111"};
-  auto root = ZeroOneTensor(space);
+  auto root = ZeroOneTensor(QSpace{"1111"});
 
   Simplify(root);
   Validate(root, CHECK_ALL);
@@ -46,19 +48,28 @@ int main() {
 
   auto clone = Clone(root);
 
-  std::vector<double> coeffs;
-  std::vector<PauliOperator> z_locals;
+  // Z local terms
+  PauliOperator op1{
+      .x = BitString{"0000"}, .y = BitString{"0000"}, .z = BitString{"1000"}};
+  PauliOperator op2{
+      .x = BitString{"0000"}, .y = BitString{"0000"}, .z = BitString{"0100"}};
+  PauliOperator op3{
+      .x = BitString{"0000"}, .y = BitString{"0000"}, .z = BitString{"0010"}};
+  PauliOperator op4{
+      .x = BitString{"0000"}, .y = BitString{"0000"}, .z = BitString{"0001"}};
 
-  QSpace mask{1};
-  QSpace zero{0};
-  for (auto _ : std::views::iota(0uz, NQUBITS)) {
-    coeffs.push_back(1.0);
-    PauliOperator op{.x = zero, .y = mask, .z = zero};
-    z_locals.push_back(op);
-    mask = mask << 1;
-  }
+  // XX interaction terms
+  PauliOperator int1{
+      .x = BitString{"1100"}, .y = BitString{"0000"}, .z = BitString{"0000"}};
+  PauliOperator int2{
+      .x = BitString{"0110"}, .y = BitString{"0000"}, .z = BitString{"0000"}};
+  PauliOperator int3{
+      .x = BitString{"0011"}, .y = BitString{"0000"}, .z = BitString{"0000"}};
+  PauliOperator int4{
+      .x = BitString{"1001"}, .y = BitString{"0000"}, .z = BitString{"0000"}};
 
-  PauliHamiltonian H{.coeffs = coeffs, .operators = z_locals};
+  PauliHamiltonian H{{2, 2, 2, 2, 1, 1, 1, 1},
+                     {op1, op2, op3, op4, int1, int2, int3, int4}};
 
   Visitor visitor{
       .sum_visitor =
