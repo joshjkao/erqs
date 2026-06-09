@@ -26,69 +26,13 @@ struct TrialResult {
   long time_slow;
 };
 
-// constexpr static auto policy = [](auto &bpool, const auto &,
-//                                   auto &kpool) -> SkewOperator {
-//   if (!bpool.empty()) {
-//     auto ret = bpool.back();
-//     bpool.pop_back();
-//     return ret;
-//   }
-//   auto ret = kpool.back();
-//   kpool.pop_back();
-//   return ret;
-// };
-
-constexpr static auto policy = [](auto &bpool, const auto &,
-                                  auto &kpool) -> SkewOperator {
-  assert(!bpool.empty() || !kpool.empty());
-  static std::random_device rand{};
-  static std::mt19937 gen{rand()};
-  static std::uniform_int_distribution<> dist(0, 1);
-  std::ranges::shuffle(bpool, gen);
-  std::ranges::shuffle(kpool, gen);
-  if (bpool.empty()) {
-    auto ret = kpool.back();
-    kpool.pop_back();
-    return ret;
-  } else if (kpool.empty()) {
-    auto ret = bpool.back();
-    bpool.pop_back();
-    return ret;
-  }
-  if (dist(gen)) {
-    auto ret = kpool.back();
-    kpool.pop_back();
-    return ret;
-  }
-  auto ret = bpool.back();
-  bpool.pop_back();
-  return ret;
-};
-
-template <typename ResultType> struct TimedResult {
-  long time;
-  ResultType ret;
-};
-template <> struct TimedResult<void> {
-  long time;
-};
-auto time_in_ms(auto &&func) {
-  using ResultType = std::invoke_result_t<decltype(func)>;
+long time_in_ms(auto func) {
   auto start = std::chrono::high_resolution_clock::now();
-  if constexpr (std::is_void_v<ResultType>) {
-    std::invoke(std::forward<decltype(func)>(func));
-    auto end = std::chrono::high_resolution_clock::now();
-    auto duration =
-        std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-    return TimedResult<ResultType>{.time = duration.count()};
-  } else {
-    auto ret = std::invoke(std::forward<decltype(func)>(func));
-    auto end = std::chrono::high_resolution_clock::now();
-    auto duration =
-        std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-    return TimedResult<ResultType>{.time = duration.count(),
-                                   .ret = std::move(ret)};
-  }
+  func();
+  auto end = std::chrono::high_resolution_clock::now();
+  auto duration =
+      std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+  return duration.count();
 }
 
 auto do_test(const TrialArgs &args) -> TrialResult {
@@ -127,12 +71,14 @@ auto do_test(const TrialArgs &args) -> TrialResult {
 
   auto conj = Operate(H, random_ket);
   auto conj_clone = Clone(conj);
+  // auto inner_fast_op = Inner(random_bra, conj);
+  SkewOperator inner_fast_op;
+  auto time_fast =
+      time_in_ms([&]() { inner_fast_op = Inner(random_bra, conj); });
 
-  auto [time_fast, inner_fast_op] =
-      time_in_ms([&]() { return Inner(random_bra, conj, policy); });
-
+  // auto inner_slow = Inner_slow(random_bra, conj_clone);
   complex inner_slow;
-  auto [time_slow] =
+  auto time_slow =
       time_in_ms([&]() { inner_slow = Inner_slow(random_bra, conj_clone); });
 
   complex inner_fast;
@@ -158,7 +104,6 @@ auto do_test(const TrialArgs &args) -> TrialResult {
                      .imag_error = imag_error,
                      .time_fast = time_fast,
                      .time_slow = time_slow};
-
   return result;
 }
 

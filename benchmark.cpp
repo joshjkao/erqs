@@ -40,26 +40,19 @@ int main(int argc, char **argv) {
   std::mt19937 gen{rd()};
   auto ket =
       RandomSumState(max_depth, n_terms, n_factors, QSpace{bit_mask}, gen);
+  auto clone2 = Clone(root);
 
-  Simplify(ket);
+  Simplify(clone2);
 
-  bool ket_valid = Validate(ket, ValidationArgs{.log_to_stdout = true});
-
-  if (!ket_valid) {
-    std::cout << "state is invalid after simplification";
-    return -1;
-  }
+  bool valid = Validate(clone2, ValidationArgs{.log_to_stdout = false});
+  if (!valid)
+    std::cout << "root state is invalid\n";
 
   SkewOperator inner;
-  double exp_val;
 
-  PauliHamiltonian H = RandomHamiltonian(5, bit_mask, gen);
+  auto do_inner = [&]() { inner = Inner(clone2, clone2); };
 
-  auto do_inner = [&]() { inner = Inner(ket, ket); };
-  auto do_exp_val = [&]() { exp_val = ExpectedValue(H, ket); };
-
-  auto inner_time = time_in_ms(do_inner);
-  auto exp_val_time = time_in_ms(do_exp_val);
+  auto time = time_in_ms(do_inner);
 
   struct rusage usage;
   getrusage(RUSAGE_SELF, &usage);
@@ -69,12 +62,48 @@ int main(int argc, char **argv) {
   std::cout << "\"n_terms\": " << n_terms << ",\n";
   std::cout << "\"n_factors\": " << n_factors << ",\n";
   std::cout << "\"n_bits\": " << n_bits << ",\n";
-  std::cout << "\"n_h_terms\": " << h_terms << ",\n";
-  std::cout << "\"n_nodes\": " << CountNodes(ket) << ",\n";
-  std::cout << "\"c_time\": " << inner_time << ",\n";
-  std::cout << "\"exp_val_time\": " << exp_val_time << ",\n";
+  std::cout << "\"n_nodes\": " << CountNodes(root) << ",\n";
+  std::cout << "\"c_time\": " << time << ",\n";
   std::cout << "\"mem_max\": " << usage.ru_maxrss << ",\n";
-  std::cout << "\"resulting_terms\": " << inner.size() << ",\n";
-  std::cout << "\"inner\": " << inner[0].coeff.real() << "\n";
+  std::cout << "\"resulting_terms\": " << inner.ketbras.size() << ",\n";
+  std::cout << "\"inner\": " << inner.ketbras[0].coeff.real() << "\n";
   std::cout << "}\n";
+
+  // std::cout << "before adjustment\n";
+  // Print(root);
+  // std::cout << "now add random term\n";
+  // AddRandomTerm(root, gen);
+  // Print(root);
+  // std::cout << "now unify random product\n";
+  // UnifyRandom(root, gen);
+  // Print(root);
+  // std::cout << "now normalize it\n";
+  // Normalize(root);
+  // Print(root);
+  // std::cout << "now prune\n";
+  // Prune(root, 0.1);
+  // Print(root);
+  // std::cout << "now remove singles\n";
+  // RemoveSingles(root);
+  // Print(root);
+  // std::cout << "squash pures\n";
+  // SquashPures(root);
+  // Print(root);
+
+  // PauliOperator op1{
+  //     .x = BitString{"0000"}, .y = BitString{"0000"}, .z =
+  //     BitString{"1000"}};
+  // PauliOperator op2{
+  //     .x = BitString{"0000"}, .y = BitString{"0000"}, .z =
+  //     BitString{"0100"}};
+  // PauliOperator op3{
+  //     .x = BitString{"0000"}, .y = BitString{"0000"}, .z =
+  //     BitString{"0010"}};
+  // PauliOperator op4{
+  //     .x = BitString{"0000"}, .y = BitString{"0000"}, .z =
+  //     BitString{"0001"}};
+
+  // PauliHamiltonian H{{1, 1, 1, 1}, {op1, op2, op3, op4}};
+
+  // OptimizeCoefficients(H, root);
 }
