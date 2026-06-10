@@ -1,12 +1,14 @@
 #include "cxxopts.hpp"
-#include "operations.h"
-#include "quantumstate.h"
-#include "validation.h"
+#include "operations.hpp"
+#include "quantumstate.hpp"
+#include "skewoperator.hpp"
+#include "validation.hpp"
 #include <iostream>
 #include <pthread.h>
 #include <random>
 #include <ranges>
 #include <stdexcept>
+#include <type_traits>
 
 struct TrialArgs {
   size_t max_depth;
@@ -24,13 +26,69 @@ struct TrialResult {
   long time_slow;
 };
 
-long time_in_ms(auto func) {
+// constexpr static auto policy = [](auto &bpool, const auto &,
+//                                   auto &kpool) -> SkewOperator {
+//   if (!bpool.empty()) {
+//     auto ret = bpool.back();
+//     bpool.pop_back();
+//     return ret;
+//   }
+//   auto ret = kpool.back();
+//   kpool.pop_back();
+//   return ret;
+// };
+
+constexpr static auto policy = [](auto &bpool, const auto &,
+                                  auto &kpool) -> SkewOperator {
+  assert(!bpool.empty() || !kpool.empty());
+  static std::random_device rand{};
+  static std::mt19937 gen{rand()};
+  static std::uniform_int_distribution<> dist(0, 1);
+  std::ranges::shuffle(bpool, gen);
+  std::ranges::shuffle(kpool, gen);
+  if (bpool.empty()) {
+    auto ret = kpool.back();
+    kpool.pop_back();
+    return ret;
+  } else if (kpool.empty()) {
+    auto ret = bpool.back();
+    bpool.pop_back();
+    return ret;
+  }
+  if (dist(gen)) {
+    auto ret = kpool.back();
+    kpool.pop_back();
+    return ret;
+  }
+  auto ret = bpool.back();
+  bpool.pop_back();
+  return ret;
+};
+
+template <typename ResultType> struct TimedResult {
+  long time;
+  ResultType ret;
+};
+template <> struct TimedResult<void> {
+  long time;
+};
+auto time_in_ms(auto &&func) {
+  using ResultType = std::invoke_result_t<decltype(func)>;
   auto start = std::chrono::high_resolution_clock::now();
-  func();
-  auto end = std::chrono::high_resolution_clock::now();
-  auto duration =
-      std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-  return duration.count();
+  if constexpr (std::is_void_v<ResultType>) {
+    std::invoke(std::forward<decltype(func)>(func));
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration =
+        std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+    return TimedResult<ResultType>{.time = duration.count()};
+  } else {
+    auto ret = std::invoke(std::forward<decltype(func)>(func));
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration =
+        std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+    return TimedResult<ResultType>{.time = duration.count(),
+                                   .ret = std::move(ret)};
+  }
 }
 
 auto do_test(const TrialArgs &args) -> TrialResult {
@@ -58,7 +116,6 @@ auto do_test(const TrialArgs &args) -> TrialResult {
     BitString x = random_bitset();
     BitString y = random_bitset() & ~x;
     BitString z = random_bitset() & ~x & ~y;
-    // std::cout << "add a term " << x << " " << y << " " << z << "\n";
     coeffs.push_back(1);
     ops.emplace_back(x, y, z);
   }
@@ -70,27 +127,25 @@ auto do_test(const TrialArgs &args) -> TrialResult {
 
   auto conj = Operate(H, random_ket);
   auto conj_clone = Clone(conj);
-  // auto inner_fast_op = Inner(random_bra, conj);
-  SkewOperator inner_fast_op;
-  auto time_fast =
-      time_in_ms([&]() { inner_fast_op = Inner(random_bra, conj); });
 
-  // auto inner_slow = Inner_slow(random_bra, conj_clone);
+  auto [time_fast, inner_fast_op] =
+      time_in_ms([&]() { return Inner(random_bra, conj, policy); });
+
   complex inner_slow;
-  auto time_slow =
+  auto [time_slow] =
       time_in_ms([&]() { inner_slow = Inner_slow(random_bra, conj_clone); });
 
   complex inner_fast;
-  if (inner_fast_op.ketbras.size() > 2)
+  if (inner_fast_op.size() > 2)
     throw std::runtime_error("skew op isn't a single term");
-  else if (inner_fast_op.ketbras.empty())
+  else if (inner_fast_op.empty())
     inner_fast = 0;
-  else if (GetSpace(inner_fast_op.ketbras[0].ket) != QSpace{0})
+  else if (GetSpace(inner_fast_op[0].ket) != QSpace{0})
     throw std::runtime_error("skewop isn't a number");
-  else if (GetSpace(inner_fast_op.ketbras[0].bra) != QSpace{0})
+  else if (GetSpace(inner_fast_op[0].bra) != QSpace{0})
     throw std::runtime_error("skewop isn't a number");
   else
-    inner_fast = inner_fast_op.ketbras[0].coeff;
+    inner_fast = inner_fast_op[0].coeff;
 
   double real_error =
       std::abs((inner_slow.real() - inner_fast.real()) / inner_slow.real());
@@ -103,6 +158,7 @@ auto do_test(const TrialArgs &args) -> TrialResult {
                      .imag_error = imag_error,
                      .time_fast = time_fast,
                      .time_slow = time_slow};
+
   return result;
 }
 
@@ -116,7 +172,7 @@ auto main(int argc, char **argv) -> int {
       "h_terms", "number of terms to make the hamiltonian",
       cxxopts::value<size_t>())("p,print_state", "print the state");
 
-  constexpr auto n_trials = 1000;
+  constexpr auto n_trials = 100;
 
   options.parse_positional({"max_depth", "n_terms", "n_factors", "h_terms"});
 

@@ -1,7 +1,7 @@
-#include "operations.h"
-#include "optimization.h"
-#include "quantumstate.h"
-#include "validation.h"
+#include "operations.hpp"
+#include "optimization.hpp"
+#include "quantumstate.hpp"
+#include "validation.hpp"
 #include <chrono>
 #include <iostream>
 #include <random>
@@ -17,10 +17,11 @@ long time_in_ms(auto func) {
 }
 
 int main(int argc, char **argv) {
-  size_t max_depth, n_terms, n_factors, n_bits;
+  size_t max_depth, n_terms, n_factors, n_bits, h_terms;
 
-  if (argc < 5) {
+  if (argc != 6) {
     std::cout << "not enough arguments\n";
+    std::cout << "expected 6 arguments, got " << argc << "\n";
     return -1;
   }
 
@@ -28,6 +29,7 @@ int main(int argc, char **argv) {
   n_terms = static_cast<size_t>(atoi(argv[2]));
   n_factors = static_cast<size_t>(atoi(argv[3]));
   n_bits = static_cast<size_t>(atoi(argv[4]));
+  h_terms = static_cast<size_t>(atoi(argv[5]));
 
   size_t bit_mask = 0;
   for (size_t i = 0; i < n_bits; ++i) {
@@ -36,21 +38,28 @@ int main(int argc, char **argv) {
 
   std::random_device rd{};
   std::mt19937 gen{rd()};
-  auto root =
+  auto ket =
       RandomSumState(max_depth, n_terms, n_factors, QSpace{bit_mask}, gen);
-  auto clone2 = Clone(root);
 
-  Simplify(clone2);
+  Simplify(ket);
 
-  bool valid = Validate(clone2, ValidationArgs{.log_to_stdout = false});
-  if (!valid)
-    std::cout << "root state is invalid\n";
+  bool ket_valid = Validate(ket, ValidationArgs{.log_to_stdout = true});
+
+  if (!ket_valid) {
+    std::cout << "state is invalid after simplification";
+    return -1;
+  }
 
   SkewOperator inner;
+  double exp_val;
 
-  auto do_inner = [&]() { inner = Inner(clone2, clone2); };
+  PauliHamiltonian H = RandomHamiltonian(5, bit_mask, gen);
 
-  auto time = time_in_ms(do_inner);
+  auto do_inner = [&]() { inner = Inner(ket, ket); };
+  auto do_exp_val = [&]() { exp_val = ExpectedValue(H, ket); };
+
+  auto inner_time = time_in_ms(do_inner);
+  auto exp_val_time = time_in_ms(do_exp_val);
 
   struct rusage usage;
   getrusage(RUSAGE_SELF, &usage);
@@ -60,48 +69,12 @@ int main(int argc, char **argv) {
   std::cout << "\"n_terms\": " << n_terms << ",\n";
   std::cout << "\"n_factors\": " << n_factors << ",\n";
   std::cout << "\"n_bits\": " << n_bits << ",\n";
-  std::cout << "\"n_nodes\": " << CountNodes(root) << ",\n";
-  std::cout << "\"c_time\": " << time << ",\n";
+  std::cout << "\"n_h_terms\": " << h_terms << ",\n";
+  std::cout << "\"n_nodes\": " << CountNodes(ket) << ",\n";
+  std::cout << "\"c_time\": " << inner_time << ",\n";
+  std::cout << "\"exp_val_time\": " << exp_val_time << ",\n";
   std::cout << "\"mem_max\": " << usage.ru_maxrss << ",\n";
-  std::cout << "\"resulting_terms\": " << inner.ketbras.size() << ",\n";
-  std::cout << "\"inner\": " << inner.ketbras[0].coeff.real() << "\n";
+  std::cout << "\"resulting_terms\": " << inner.size() << ",\n";
+  std::cout << "\"inner\": " << inner[0].coeff.real() << "\n";
   std::cout << "}\n";
-
-  // std::cout << "before adjustment\n";
-  // Print(root);
-  // std::cout << "now add random term\n";
-  // AddRandomTerm(root, gen);
-  // Print(root);
-  // std::cout << "now unify random product\n";
-  // UnifyRandom(root, gen);
-  // Print(root);
-  // std::cout << "now normalize it\n";
-  // Normalize(root);
-  // Print(root);
-  // std::cout << "now prune\n";
-  // Prune(root, 0.1);
-  // Print(root);
-  // std::cout << "now remove singles\n";
-  // RemoveSingles(root);
-  // Print(root);
-  // std::cout << "squash pures\n";
-  // SquashPures(root);
-  // Print(root);
-
-  // PauliOperator op1{
-  //     .x = BitString{"0000"}, .y = BitString{"0000"}, .z =
-  //     BitString{"1000"}};
-  // PauliOperator op2{
-  //     .x = BitString{"0000"}, .y = BitString{"0000"}, .z =
-  //     BitString{"0100"}};
-  // PauliOperator op3{
-  //     .x = BitString{"0000"}, .y = BitString{"0000"}, .z =
-  //     BitString{"0010"}};
-  // PauliOperator op4{
-  //     .x = BitString{"0000"}, .y = BitString{"0000"}, .z =
-  //     BitString{"0001"}};
-
-  // PauliHamiltonian H{{1, 1, 1, 1}, {op1, op2, op3, op4}};
-
-  // OptimizeCoefficients(H, root);
 }

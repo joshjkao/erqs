@@ -1,9 +1,10 @@
-#include "operations.h"
-#include "optimization.h"
-#include "quantumstate.h"
-#include "validation.h"
+#include "operations.hpp"
+#include "optimization.hpp"
+#include "quantumstate.hpp"
+#include "validation.hpp"
 #include <chrono>
 #include <iostream>
+#include <memory>
 #include <random>
 
 auto time_in_ms(auto func) {
@@ -100,5 +101,5 @@ int main() {
   std::cout << ExpectedValue(H, clone1) << "\n";
   std::cout << ExpectedValue(H, clone2) << "\n";
 
-  //   // OptimizeCoefficients(H, root);
+  // OptimizeCoefficients(H, root);
 }

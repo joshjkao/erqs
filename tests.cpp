@@ -1,6 +1,6 @@
-#include "optimization.h"
-#include "quantumstate.h"
-#include "validation.h"
+#include "optimization.hpp"
+#include "quantumstate.hpp"
+#include "validation.hpp"
 #include <gtest/gtest.h>
 #include <random>
 #include <stdexcept>
