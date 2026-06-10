@@ -1,7 +1,7 @@
 #include "cxxopts.hpp"
-#include "optimization.h"
-#include "quantumstate.h"
-#include "validation.h"
+#include "optimization.hpp"
+#include "quantumstate.hpp"
+#include "validation.hpp"
 #include <iostream>
 #include <random>
 
