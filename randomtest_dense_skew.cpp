@@ -3,6 +3,7 @@
 #include "quantumstate.hpp"
 #include "skewoperator.hpp"
 #include "validation.hpp"
+#include <cstddef>
 #include <iostream>
 #include <pthread.h>
 #include <random>
@@ -38,31 +39,63 @@ struct TrialResult {
 //   return ret;
 // };
 
-constexpr static auto policy = [](auto &bpool, const auto &,
+// constexpr static auto policy = [](auto &bpool, const auto &,
+//                                   auto &kpool) -> SkewOperator {
+//   assert(!bpool.empty() || !kpool.empty());
+//   static std::random_device rand{};
+//   static std::mt19937 gen{rand()};
+//   static std::uniform_int_distribution<> dist(0, 1);
+//   std::ranges::shuffle(bpool, gen);
+//   std::ranges::shuffle(kpool, gen);
+//   if (bpool.empty()) {
+//     auto ret = kpool.back();
+//     kpool.pop_back();
+//     return ret;
+//   } else if (kpool.empty()) {
+//     auto ret = bpool.back();
+//     bpool.pop_back();
+//     return ret;
+//   }
+//   if (dist(gen)) {
+//     auto ret = kpool.back();
+//     kpool.pop_back();
+//     return ret;
+//   }
+//   auto ret = bpool.back();
+//   bpool.pop_back();
+//   return ret;
+// };
+
+constexpr static auto policy = [](auto &bpool, const auto &ret,
                                   auto &kpool) -> SkewOperator {
-  assert(!bpool.empty() || !kpool.empty());
-  static std::random_device rand{};
-  static std::mt19937 gen{rand()};
-  static std::uniform_int_distribution<> dist(0, 1);
-  std::ranges::shuffle(bpool, gen);
-  std::ranges::shuffle(kpool, gen);
-  if (bpool.empty()) {
-    auto ret = kpool.back();
-    kpool.pop_back();
-    return ret;
-  } else if (kpool.empty()) {
-    auto ret = bpool.back();
-    bpool.pop_back();
-    return ret;
+  QSpace bspace = ret.GetBraSpace();
+  QSpace kspace = ret.GetKetSpace();
+  size_t b_max_overlap{0uz};
+  size_t b_curr_best{0uz};
+  for (auto i{0uz}; i < bpool.size(); ++i) {
+    size_t overlap = (bpool[i].GetBraSpace() & bspace).count();
+    if (overlap > b_max_overlap) {
+      b_max_overlap = overlap;
+      b_curr_best = i;
+    }
   }
-  if (dist(gen)) {
-    auto ret = kpool.back();
-    kpool.pop_back();
-    return ret;
+  size_t k_max_overlap{0uz};
+  size_t k_curr_best{0uz};
+  for (auto i{0uz}; i < kpool.size(); ++i) {
+    size_t overlap = (kpool[i].GetKetSpace() & kspace).count();
+    if (overlap > k_max_overlap) {
+      k_max_overlap = overlap;
+      k_curr_best = i;
+    }
   }
-  auto ret = bpool.back();
-  bpool.pop_back();
-  return ret;
+  if (b_curr_best > k_curr_best) {
+    SkewOperator ret1 = bpool[b_curr_best];
+    bpool.erase(bpool.begin() + static_cast<std::ptrdiff_t>(b_curr_best));
+    return ret1;
+  }
+  SkewOperator ret1 = kpool[k_curr_best];
+  kpool.erase(kpool.begin() + static_cast<std::ptrdiff_t>(k_curr_best));
+  return ret1;
 };
 
 template <typename ResultType> struct TimedResult {
