@@ -42,14 +42,14 @@ def run_single_benchmark(args):
 def run_all_parallel():
     n_bits = 10
     h_terms = 5
-    n_trials = 1000
+    n_trials = 10
 
     # 2. Generate all combinations of parameters (The "Flattening")
     # This creates a generator of tuples: (max_depth, n_factors, n_terms, n_bits)
     param_combinations = product(
-        range(3, 8),  # max_depth
-        range(3, 8),  # n_factors
-        range(3, 8),  # n_terms
+        range(3, 5),  # max_depth
+        range(3, 5),  # n_factors
+        range(3, 5),  # n_terms
         [n_bits],
         [h_terms],
     )
@@ -74,7 +74,7 @@ def run_all():
     results = []
     n_bits = 10
     h_terms = 5
-    n_trials = 100
+    n_trials = 10
     for max_depth in range(3, 6):
         for n_factors in range(3, 6):
             for n_terms in range(3, 6):

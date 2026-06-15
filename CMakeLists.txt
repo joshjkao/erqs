@@ -59,6 +59,10 @@ target_link_libraries(randomtest_simplify PRIVATE erqs NLopt::nlopt cxxopts::cxx
 add_executable(randomtest_expectation randomtest_expectation.cpp)
 target_link_libraries(randomtest_expectation PRIVATE erqs NLopt::nlopt cxxopts::cxxopts)
 
+# executable for testing stuff
+add_executable(randomtest_policy randomtest_policy.cpp)
+target_link_libraries(randomtest_policy PRIVATE erqs NLopt::nlopt cxxopts::cxxopts)
+
 
 # executable for testing stuff
 add_executable(randomtest_io randomtest_io.cpp)
