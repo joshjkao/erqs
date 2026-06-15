@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 import json
 
 
@@ -30,6 +31,23 @@ def load_normalize(path):
     )
 
     return df
+
+
+def quick_metrics(path):
+    df = load_normalize(path)
+
+    print(df.head())
+
+    print(f"max real error: {np.max(df['fast_real_error'])}")
+    print(f"max imag error: {np.max(df['fast_imag_error'])}")
+
+    df_naive = df[df["fast_policy"] == "naive"]
+    df_random = df[df["fast_policy"] == "random"]
+    df_overlap = df[df["fast_policy"] == "overlap"]
+
+    print(f"mean time for naive order: {np.mean(df_naive['fast_time_fast'])}")
+    print(f"mean time for random order: {np.mean(df_random['fast_time_fast'])}")
+    print(f"mean time for overlap order: {np.mean(df_overlap['fast_time_fast'])}")
 
 
 if __name__ == "__main__":

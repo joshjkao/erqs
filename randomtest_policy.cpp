@@ -20,6 +20,7 @@ struct TrialArgs {
   size_t n_terms;
   size_t n_factors;
   size_t h_terms;
+  bool skip_slow;
 };
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(TrialArgs, max_depth, n_terms, n_factors,
                                    h_terms)
@@ -123,7 +124,7 @@ std::array<std::function<SkewOperator(std::vector<SkewOperator> &,
     policies{policy_naive, policy_random, policy_overlap};
 
 auto do_test(const TrialArgs &args) -> TrialResult {
-  auto [max_depth, n_terms, n_factors, h_terms] = args;
+  auto [max_depth, n_terms, n_factors, h_terms, skip_slow] = args;
   QSpace space = ~QSpace{0};
   std::random_device rd{};
   std::mt19937 gen{rd()};
@@ -136,8 +137,14 @@ auto do_test(const TrialArgs &args) -> TrialResult {
   auto conj = Operate(H, random_ket);
 
   complex inner_slow;
-  auto [time_slow] =
-      time_in_ms([&]() { inner_slow = Inner_slow(random_bra, conj); });
+  long time_slow;
+  if (skip_slow) {
+    inner_slow = {std::nan(""), std::nan("")};
+    time_slow = 0;
+  } else {
+    time_slow =
+        time_in_ms([&]() { inner_slow = Inner_slow(random_bra, conj); }).time;
+  }
 
   std::vector<FastInnerMetrics> fast_metrics;
 
@@ -191,9 +198,10 @@ auto main(int argc, char **argv) -> int {
       "n_terms", "terms per sum state", cxxopts::value<size_t>())(
       "n_factors", "factors per product state", cxxopts::value<size_t>())(
       "h_terms", "number of terms to make the hamiltonian",
-      cxxopts::value<size_t>())("p,print_state", "print the state");
+      cxxopts::value<size_t>())("p,print_state", "print the state")(
+      "s,skip_slow", "skip the slow inner product");
 
-  constexpr auto n_trials = 5;
+  constexpr auto n_trials = 1000;
 
   options.parse_positional({"max_depth", "n_terms", "n_factors", "h_terms"});
 
@@ -205,11 +213,13 @@ auto main(int argc, char **argv) -> int {
   size_t n_factors = result["n_factors"].as<size_t>();
   size_t h_terms = result["h_terms"].as<size_t>();
   // bool print_state = result["print_state"].as<bool>();
+  bool skip_slow = result["skip_slow"].as<bool>();
 
   TrialArgs args{.max_depth = max_depth,
                  .n_terms = n_terms,
                  .n_factors = n_factors,
-                 .h_terms = h_terms};
+                 .h_terms = h_terms,
+                 .skip_slow = skip_slow};
 
   std::vector<TrialResult> trial_results;
   for (auto _ : std::views::iota(0, n_trials)) {
