@@ -45,17 +45,17 @@ struct TrialResult {
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(TrialResult, args, real_inner, imag_inner,
                                    time_slow, fast_metrics)
 
-constexpr static auto policy_naive = [](auto &bpool, const auto &,
-                                        auto &kpool) -> SkewOperator {
-  if (!bpool.empty()) {
-    auto ret = bpool.back();
-    bpool.pop_back();
-    return ret;
-  }
-  auto ret = kpool.back();
-  kpool.pop_back();
-  return ret;
-};
+// constexpr static auto policy_naive = [](auto &bpool, const auto &,
+//                                         auto &kpool) -> SkewOperator {
+//   if (!bpool.empty()) {
+//     auto ret = bpool.back();
+//     bpool.pop_back();
+//     return ret;
+//   }
+//   auto ret = kpool.back();
+//   kpool.pop_back();
+//   return ret;
+// };
 
 constexpr static auto policy_random = [](auto &bpool, const auto &,
                                          auto &kpool) -> SkewOperator {
@@ -116,12 +116,12 @@ constexpr static auto policy_overlap = [](auto &bpool, const auto &ret,
   return ret1;
 };
 
-std::array<std::string, 3> policy_names{"naive", "random", "overlap"};
+std::array<std::string, 2> policy_names{"random", "overlap"};
 std::array<std::function<SkewOperator(std::vector<SkewOperator> &,
                                       const SkewOperator &,
                                       std::vector<SkewOperator> &)>,
            3>
-    policies{policy_naive, policy_random, policy_overlap};
+    policies{policy_random, policy_overlap};
 
 auto do_test(const TrialArgs &args) -> TrialResult {
   auto [max_depth, n_terms, n_factors, h_terms, skip_slow] = args;
@@ -130,7 +130,9 @@ auto do_test(const TrialArgs &args) -> TrialResult {
   std::mt19937 gen{rd()};
 
   auto random_ket = RandomSumState(max_depth, n_terms, n_factors, space, gen);
-  auto random_bra = RandomSumState(max_depth, n_terms, n_factors, space, gen);
+  // auto random_bra = RandomSumState(max_depth, n_terms, n_factors, space,
+  // gen);
+  auto random_bra = Clone(random_ket);
 
   auto H = RandomHamiltonian(h_terms, ~QSpace{0}, gen);
 
