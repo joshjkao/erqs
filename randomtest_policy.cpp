@@ -221,10 +221,11 @@ auto main(int argc, char **argv) -> int {
                  .h_terms = h_terms,
                  .skip_slow = skip_slow};
 
-  std::vector<TrialResult> trial_results;
-  for (auto _ : std::views::iota(0, n_trials)) {
+  std::vector<TrialResult> trial_results(n_trials);
+#pragma omp parallel for
+  for (size_t i = 0; i < n_trials; ++i) {
     auto res = do_test(args);
-    trial_results.push_back(res);
+    trial_results[i] = res;
   }
 
   nlohmann::json j{trial_results};
