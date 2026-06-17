@@ -47,9 +47,9 @@ def run_all_parallel():
     # 2. Generate all combinations of parameters (The "Flattening")
     # This creates a generator of tuples: (max_depth, n_factors, n_terms, n_bits)
     param_combinations = product(
-        range(3, 5),  # max_depth
-        range(3, 5),  # n_factors
-        range(3, 5),  # n_terms
+        range(3, 6),  # max_depth
+        range(3, 6),  # n_factors
+        range(3, 6),  # n_terms
         [n_bits],
         [h_terms],
     )
@@ -93,8 +93,8 @@ def run_all():
 
 
 def main():
-    run_all()
-    # run_all_parallel()
+    # run_all()
+    run_all_parallel()
 
 
 if __name__ == "__main__":

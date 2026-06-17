@@ -35,7 +35,7 @@ int main() {
   auto seed = rd();
   std::mt19937 gen{seed};
   // auto root = RandomSumState(3, 2, 2, QSpace{"1111"}, gen);
-  QSpace space{"1111"};
+  QSpace space = ~QSpace{0};
   auto root = ZeroOneTensor(space);
 
   Simplify(root);
@@ -47,18 +47,24 @@ int main() {
   auto clone = Clone(root);
 
   std::vector<double> coeffs;
-  std::vector<PauliOperator> z_locals;
+  std::vector<PauliOperator> locals;
 
-  QSpace mask{1};
   QSpace zero{0};
-  for (auto _ : std::views::iota(0uz, NQUBITS)) {
+  for (auto i : std::views::iota(0uz, NQUBITS)) {
+    QSpace mask = QSpace{1} << i;
     coeffs.push_back(1.0);
     PauliOperator op{.x = zero, .y = mask, .z = zero};
-    z_locals.push_back(op);
-    mask = mask << 1;
+    locals.push_back(op);
   }
 
-  PauliHamiltonian H{.coeffs = coeffs, .operators = z_locals};
+  for (auto i : std::views::iota(0uz, NQUBITS)) {
+    QSpace mask = QSpace{3} << i;
+    coeffs.push_back(1.0);
+    PauliOperator op{.x = mask, .y = zero, .z = zero};
+    locals.push_back(op);
+  }
+
+  PauliHamiltonian H{.coeffs = coeffs, .operators = locals};
 
   Visitor visitor{
       .sum_visitor =
