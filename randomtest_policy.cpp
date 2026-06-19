@@ -4,15 +4,14 @@
 #include "quantumstate.hpp"
 #include "skewoperator.hpp"
 #include "utility.hpp"
+#include <atomic>
 #include <complex>
 #include <cstddef>
+#include <expected>
 #include <iostream>
-#include <nlohmann/detail/macro_scope.hpp>
-#include <nlohmann/json.hpp>
-#include <nlohmann/json_fwd.hpp>
+#include <memory>
 #include <pthread.h>
 #include <random>
-#include <ranges>
 #include <stdexcept>
 
 struct TrialArgs {
@@ -20,205 +19,173 @@ struct TrialArgs {
   size_t n_terms;
   size_t n_factors;
   size_t h_terms;
-  bool skip_slow;
 };
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(TrialArgs, max_depth, n_terms, n_factors,
-                                   h_terms)
-struct FastInnerMetrics {
+
+struct ImplMetrics {
   std::string policy;
   double real_inner;
   double imag_inner;
-  double real_error;
-  double imag_error;
-  long time_fast;
+  long time;
 };
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(FastInnerMetrics, policy, real_inner,
-                                   imag_inner, real_error, imag_error,
-                                   time_fast)
 struct TrialResult {
   TrialArgs args;
-  double real_inner;
-  double imag_inner;
-  long time_slow;
-  std::vector<FastInnerMetrics> fast_metrics;
+  std::vector<ImplMetrics> metrics;
 };
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(TrialResult, args, real_inner, imag_inner,
-                                   time_slow, fast_metrics)
+auto parse_skewop_ret(const SkewOperator &op)
+    -> std::expected<complex, std::string> {
+  complex ret;
+  if (op.size() > 2)
+    return std::unexpected<std::string>{"skewop isn't a single term"};
+  else if (op.empty())
+    ret = 0;
+  else if (GetSpace(op[0].ket) != QSpace{0})
+    return std::unexpected<std::string>{"skewop isn't a number"};
+  else if (GetSpace(op[0].bra) != QSpace{0})
+    return std::unexpected<std::string>{"skewop isn't a number"};
+  else
+    ret = op[0].coeff;
+  return ret;
+};
 
-// constexpr static auto policy_naive = [](auto &bpool, const auto &,
-//                                         auto &kpool) -> SkewOperator {
-//   if (!bpool.empty()) {
-//     auto ret = bpool.back();
-//     bpool.pop_back();
-//     return ret;
-//   }
-//   auto ret = kpool.back();
-//   kpool.pop_back();
-//   return ret;
+// constexpr static auto inner_slow =
+//     [](std::shared_ptr<SumState> bra,
+//        std::shared_ptr<SumState> ket) -> std::expected<complex, std::string>
+//        {
+//   return Inner_slow(bra, ket);
 // };
 
-// constexpr static auto policy_random = [](auto &bpool, const auto &,
-//                                          auto &kpool) -> SkewOperator {
-//   assert(!bpool.empty() || !kpool.empty());
-//   static thread_local std::random_device rand{};
-//   static thread_local std::mt19937 gen{rand()};
-//   static thread_local std::uniform_int_distribution<> dist(0, 1);
-//   std::ranges::shuffle(bpool, gen);
-//   std::ranges::shuffle(kpool, gen);
-//   if (bpool.empty()) {
+constexpr static auto inner_double =
+    [](std::shared_ptr<SumState> bra,
+       std::shared_ptr<SumState> ket) -> std::expected<complex, std::string> {
+  auto inner = Inner_double(bra, ket);
+  return parse_skewop_ret(inner);
+};
+
+// constexpr static auto inner_naive =
+//     [](std::shared_ptr<SumState> bra,
+//        std::shared_ptr<SumState> ket) -> std::expected<complex, std::string>
+//        {
+//   constexpr static auto policy_naive = [](auto &bpool, const auto &,
+//                                           auto &kpool) -> SkewOperator {
+//     if (!bpool.empty()) {
+//       auto ret = bpool.back();
+//       bpool.pop_back();
+//       return ret;
+//     }
 //     auto ret = kpool.back();
 //     kpool.pop_back();
 //     return ret;
-//   } else if (kpool.empty()) {
-//     auto ret = bpool.back();
-//     bpool.pop_back();
-//     return ret;
-//   }
-//   if (dist(gen)) {
-//     auto ret = kpool.back();
-//     kpool.pop_back();
-//     return ret;
-//   }
-//   auto ret = bpool.back();
-//   bpool.pop_back();
-//   return ret;
+//   };
+//   auto inner = Inner(bra, ket, policy_naive);
+//   return parse_skewop_ret(inner);
 // };
 
-constexpr static auto policy_overlap = [](auto &bpool, const auto &ret,
-                                          auto &kpool) -> SkewOperator {
-  QSpace bspace = ret.GetBraSpace();
-  QSpace kspace = ret.GetKetSpace();
-  size_t b_max_overlap{0uz};
-  size_t b_curr_best{0uz};
-  for (auto i{0uz}; i < bpool.size(); ++i) {
-    size_t overlap = (bpool[i].GetBraSpace() & bspace).count();
-    if (overlap > b_max_overlap) {
-      b_max_overlap = overlap;
-      b_curr_best = i;
+constexpr static auto inner_random =
+    [](std::shared_ptr<SumState> bra,
+       std::shared_ptr<SumState> ket) -> std::expected<complex, std::string> {
+  constexpr static auto policy_random = [](auto &bpool, const auto &,
+                                           auto &kpool) -> SkewOperator {
+    assert(!bpool.empty() || !kpool.empty());
+    static thread_local std::random_device rand{};
+    static thread_local std::mt19937 gen{rand()};
+    static thread_local std::uniform_int_distribution<> dist(0, 1);
+    std::ranges::shuffle(bpool, gen);
+    std::ranges::shuffle(kpool, gen);
+    if (bpool.empty()) {
+      auto ret = kpool.back();
+      kpool.pop_back();
+      return ret;
+    } else if (kpool.empty()) {
+      auto ret = bpool.back();
+      bpool.pop_back();
+      return ret;
     }
-  }
-  size_t k_max_overlap{0uz};
-  size_t k_curr_best{0uz};
-  for (auto i{0uz}; i < kpool.size(); ++i) {
-    size_t overlap = (kpool[i].GetKetSpace() & kspace).count();
-    if (overlap > k_max_overlap) {
-      k_max_overlap = overlap;
-      k_curr_best = i;
+    if (dist(gen)) {
+      auto ret = kpool.back();
+      kpool.pop_back();
+      return ret;
     }
-  }
-  if (b_curr_best > k_curr_best || (kpool.empty())) {
-    SkewOperator ret1 = bpool[b_curr_best];
-    bpool.erase(bpool.begin() + static_cast<std::ptrdiff_t>(b_curr_best));
+    auto ret = bpool.back();
+    bpool.pop_back();
+    return ret;
+  };
+  auto inner = Inner(bra, ket, policy_random);
+  return parse_skewop_ret(inner);
+};
+
+constexpr static auto inner_overlap =
+    [](std::shared_ptr<SumState> bra,
+       std::shared_ptr<SumState> ket) -> std::expected<complex, std::string> {
+  constexpr static auto policy_overlap = [](auto &bpool, const auto &ret,
+                                            auto &kpool) -> SkewOperator {
+    QSpace bspace = ret.GetBraSpace();
+    QSpace kspace = ret.GetKetSpace();
+    size_t b_max_overlap{0uz};
+    size_t b_curr_best{0uz};
+    for (auto i{0uz}; i < bpool.size(); ++i) {
+      size_t overlap = (bpool[i].GetBraSpace() & bspace).count();
+      if (overlap > b_max_overlap) {
+        b_max_overlap = overlap;
+        b_curr_best = i;
+      }
+    }
+    size_t k_max_overlap{0uz};
+    size_t k_curr_best{0uz};
+    for (auto i{0uz}; i < kpool.size(); ++i) {
+      size_t overlap = (kpool[i].GetKetSpace() & kspace).count();
+      if (overlap > k_max_overlap) {
+        k_max_overlap = overlap;
+        k_curr_best = i;
+      }
+    }
+    if (b_curr_best > k_curr_best || (kpool.empty())) {
+      SkewOperator ret1 = bpool[b_curr_best];
+      bpool.erase(bpool.begin() + static_cast<std::ptrdiff_t>(b_curr_best));
+      return ret1;
+    }
+    SkewOperator ret1 = kpool[k_curr_best];
+    kpool.erase(kpool.begin() + static_cast<std::ptrdiff_t>(k_curr_best));
     return ret1;
-  }
-  SkewOperator ret1 = kpool[k_curr_best];
-  kpool.erase(kpool.begin() + static_cast<std::ptrdiff_t>(k_curr_best));
-  return ret1;
+  };
+  auto inner = Inner(bra, ket, policy_overlap);
+  return parse_skewop_ret(inner);
 };
 
-std::array<std::string, 1> policy_names{"overlap"};
-std::array<std::function<SkewOperator(std::vector<SkewOperator> &,
-                                      const SkewOperator &,
-                                      std::vector<SkewOperator> &)>,
-           1>
-    policies{policy_overlap};
+struct InnerImpl {
+  std::string name;
+  std::function<std::expected<complex, std::string>(std::shared_ptr<SumState>,
+                                                    std::shared_ptr<SumState>)>
+      impl;
+};
+
+std::array<InnerImpl, 3> inner_impls{{{"doublecon", inner_double},
+                                      {"random", inner_random},
+                                      {"overlap", inner_overlap}}};
 
 auto do_test(const TrialArgs &args) -> TrialResult {
-  auto [max_depth, n_terms, n_factors, h_terms, skip_slow] = args;
+  auto [max_depth, n_terms, n_factors, h_terms] = args;
   QSpace space = ~QSpace{0};
   std::random_device rd{};
   std::mt19937 gen{rd()};
 
   auto random_ket = RandomSumState(max_depth, n_terms, n_factors, space, gen);
   auto random_bra = RandomSumState(max_depth, n_terms, n_factors, space, gen);
-  // auto random_bra = Clone(random_ket);
-
   auto H = RandomHamiltonian(h_terms, ~QSpace{0}, gen);
-
   auto conj = Operate(H, random_ket);
+  std::vector<ImplMetrics> metrics;
+  for (const auto &[name, inner_impl] : inner_impls) {
+    auto [time, inner_op] =
+        time_in_ms([&]() { return inner_impl(random_bra, conj); });
 
-  complex inner_slow;
-  long time_slow;
-  if (skip_slow) {
-    inner_slow = {std::nan(""), std::nan("")};
-    time_slow = 0;
-  } else {
-    time_slow =
-        time_in_ms([&]() { inner_slow = Inner_slow(random_bra, conj); }).time;
+    auto inner = inner_op
+                     .or_else([](const auto &err) -> decltype(inner_op) {
+                       throw std::runtime_error(err);
+                     })
+                     .value();
+    metrics.emplace_back(name, inner.real(), inner.imag(), time);
   }
 
-  std::vector<FastInnerMetrics> fast_metrics;
-
-  auto [time_fast_double, inner_fast_double_op] =
-      time_in_ms([&]() { return Inner_double(random_bra, conj); });
-  complex inner_fast_double;
-  if (inner_fast_double_op.size() > 2)
-    throw std::runtime_error("skew op isn't a single term");
-  else if (inner_fast_double_op.empty())
-    inner_fast_double = 0;
-  else if (GetSpace(inner_fast_double_op[0].ket) != QSpace{0})
-    throw std::runtime_error("skewop isn't a number");
-  else if (GetSpace(inner_fast_double_op[0].bra) != QSpace{0})
-    throw std::runtime_error("skewop isn't a number");
-  else
-    inner_fast_double = inner_fast_double_op[0].coeff;
-
-  double real_error_double = std::abs(
-      (inner_slow.real() - inner_fast_double.real()) / inner_slow.real());
-  double imag_error_double = std::abs(
-      (inner_slow.imag() - inner_fast_double.imag()) / inner_slow.imag());
-
-  FastInnerMetrics metrics_double{
-      .policy = "double-contract",
-      .real_inner = inner_fast_double.real(),
-      .imag_inner = inner_fast_double.imag(),
-      .real_error = real_error_double,
-      .imag_error = imag_error_double,
-      .time_fast = time_fast_double,
-  };
-
-  fast_metrics.push_back(metrics_double);
-
-  for (const auto &&[name, policy] : std::views::zip(policy_names, policies)) {
-    auto [time_fast, inner_fast_op] =
-        time_in_ms([&]() { return Inner(random_bra, conj, policy); });
-
-    complex inner_fast;
-    if (inner_fast_op.size() > 2)
-      throw std::runtime_error("skew op isn't a single term");
-    else if (inner_fast_op.empty())
-      inner_fast = 0;
-    else if (GetSpace(inner_fast_op[0].ket) != QSpace{0})
-      throw std::runtime_error("skewop isn't a number");
-    else if (GetSpace(inner_fast_op[0].bra) != QSpace{0})
-      throw std::runtime_error("skewop isn't a number");
-    else
-      inner_fast = inner_fast_op[0].coeff;
-
-    double real_error =
-        std::abs((inner_slow.real() - inner_fast.real()) / inner_slow.real());
-    double imag_error =
-        std::abs((inner_slow.imag() - inner_fast.imag()) / inner_slow.imag());
-
-    FastInnerMetrics metrics{
-        .policy = name,
-        .real_inner = inner_fast.real(),
-        .imag_inner = inner_fast.imag(),
-        .real_error = real_error,
-        .imag_error = imag_error,
-        .time_fast = time_fast,
-    };
-
-    fast_metrics.push_back(metrics);
-  }
-
-  TrialResult result{.args = args,
-                     .real_inner = inner_slow.real(),
-                     .imag_inner = inner_slow.imag(),
-                     .time_slow = time_slow,
-                     .fast_metrics = fast_metrics};
-
-  return result;
+  return {args, metrics};
 }
 
 auto main(int argc, char **argv) -> int {
@@ -232,7 +199,7 @@ auto main(int argc, char **argv) -> int {
       cxxopts::value<size_t>())("p,print_state", "print the state")(
       "s,skip_slow", "skip the slow inner product");
 
-  constexpr auto n_trials = 1000;
+  constexpr auto n_trials = 100;
 
   options.parse_positional({"max_depth", "n_terms", "n_factors", "h_terms"});
 
@@ -244,21 +211,54 @@ auto main(int argc, char **argv) -> int {
   size_t n_factors = result["n_factors"].as<size_t>();
   size_t h_terms = result["h_terms"].as<size_t>();
   // bool print_state = result["print_state"].as<bool>();
-  bool skip_slow = result["skip_slow"].as<bool>();
+  // bool skip_slow = result["skip_slow"].as<bool>();
 
   TrialArgs args{.max_depth = max_depth,
                  .n_terms = n_terms,
                  .n_factors = n_factors,
-                 .h_terms = h_terms,
-                 .skip_slow = skip_slow};
+                 .h_terms = h_terms};
 
   std::vector<TrialResult> trial_results(n_trials);
+
+  std::atomic<size_t> completed_trials{0};
+
+  size_t update_interval = n_trials / 20;
+  if (update_interval == 0)
+    update_interval = 1; // Prevent modulo by zero
+
 #pragma omp parallel for
   for (size_t i = 0; i < n_trials; ++i) {
     auto res = do_test(args);
-    trial_results[i] = res;
-  }
 
-  nlohmann::json j{trial_results};
-  std::cout << j;
+    for (size_t j = 0; j < inner_impls.size(); ++j) {
+      trial_results[i] = res;
+    }
+
+    size_t current = ++completed_trials;
+
+    if (current % update_interval == 0 || current == n_trials) {
+
+#pragma omp critical
+      {
+        std::cout << "Progress: " << current << " / " << n_trials << " ("
+                  << (current * 100 / n_trials) << "%)\r" << std::flush;
+      }
+    }
+  }
+  std::cout << std::endl;
+
+  std::cout << "trial,";
+  for (const auto &[name, _] : inner_impls) {
+    std::cout << name << "_real_inner," << name << "_imag_inner," << name
+              << "_time,";
+  }
+  std::cout << std::endl;
+  for (const auto &trial_result : trial_results) {
+    auto [res_args, res_metrics] = trial_result;
+    for (const auto &metric : res_metrics) {
+      std::cout << metric.real_inner << "," << metric.imag_inner << ","
+                << metric.time << ",";
+    }
+    std::cout << "\n";
+  }
 }
