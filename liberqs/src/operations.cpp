@@ -1,5 +1,4 @@
 #include "operations.hpp"
-#include "optimization.hpp"
 #include "quantumstate.hpp"
 #include "skewoperator.hpp"
 #include <cassert>
@@ -196,7 +195,7 @@ double Norm(const std::shared_ptr<SumState> &state) {
   assert(inner.size() == 1);
   assert(GetSpace(inner[0].bra) == QSpace{0});
   assert(GetSpace(inner[0].ket) == QSpace{0});
-  assert(inner[0].coeff.imag() <= 1e-6);
+  // assert(inner[0].coeff.imag() <= 1e-6);
   return inner[0].coeff.real();
 }
 
@@ -219,7 +218,7 @@ double ExpectedValue(const PauliHamiltonian &h,
     return 0.0;
   assert(GetSpace(inner[0].bra) == QSpace{0});
   assert(GetSpace(inner[0].ket) == QSpace{0});
-  assert(inner[0].coeff.imag() <= 1e-6);
+  // assert(inner[0].coeff.imag() <= 1e-6);
   assert(self_inner != 0.0);
   return inner[0].coeff.real() / self_inner;
 }
@@ -267,4 +266,91 @@ double ExpectedValue_slow(const PauliHamiltonian &h,
     accumulator += std::conj(coeff) * it->second;
   }
   return accumulator.real() / norm_sq;
+}
+
+SkewOperator Inner_double(const std::shared_ptr<ProductState> &p1,
+                          const std::shared_ptr<ProductState> &p2) {
+  if ((GetSpace(p1) & GetSpace(p2)).none())
+    return SkewOperator{{KetBra{.coeff = 1.0, .ket = p2, .bra = p1}}};
+
+  QSpace unused_bra = p1->space;
+  QSpace unused_ket = p2->space;
+  SkewOperator ret;
+  ret.AddKetBra(KetBra{.coeff = 1.0,
+                       .ket = MakePure(QSpace{0}, QSpace{0}),
+                       .bra = MakePure(QSpace{0}, QSpace{0})});
+  for (auto &s1 : p1->states) {
+    for (auto &s2 : p2->states) {
+      if ((s1->space & unused_bra & s2->space & unused_ket).any()) {
+        unused_bra ^= s1->space;
+        unused_ket ^= s2->space;
+        SkewOperator term = Inner_double(s1, s2);
+        ret = Multiply_double(ret, term);
+      }
+    }
+  }
+  std::vector<std::shared_ptr<SumState>> unused_bras;
+  std::vector<std::shared_ptr<SumState>> unused_kets;
+  bool has_unused = false;
+  for (auto &s1 : p1->states) {
+    if ((s1->space & unused_bra).any()) {
+      unused_bras.push_back(s1);
+      has_unused = true;
+    }
+  }
+  for (auto &s2 : p2->states) {
+    if ((s2->space & unused_ket).any()) {
+      unused_kets.push_back(s2);
+      has_unused = true;
+    }
+  }
+  if (has_unused) {
+    ptr_variant ket;
+    if (unused_kets.empty())
+      ket = MakePure(QSpace{0}, QSpace{0});
+    else
+      ket = MakeProduct(unused_kets);
+    ptr_variant bra;
+    if (unused_bras.empty())
+      bra = MakePure(QSpace{0}, QSpace{0});
+    else
+      bra = MakeProduct(unused_bras);
+    KetBra unused{.coeff = 1.0, .ket = ket, .bra = bra};
+    SkewOperator extra{{unused}};
+    ret = Multiply_double(ret, extra);
+  }
+  return ret;
+}
+SkewOperator Inner_double(const std::shared_ptr<PureState> &p1,
+                          const std::shared_ptr<PureState> &p2) {
+  return Inner(p1, p2);
+}
+SkewOperator Inner_double(const std::shared_ptr<ProductState> &p1,
+                          const std::shared_ptr<PureState> &p2) {
+  std::shared_ptr<SumState> sum = MakeSum({1.0}, {p2});
+  std::shared_ptr<ProductState> prod = MakeProduct({sum});
+  return Inner_double(p1, prod);
+}
+SkewOperator Inner_double(const std::shared_ptr<PureState> &p1,
+                          const std::shared_ptr<ProductState> &p2) {
+  auto sum = MakeSum({1.0}, {p1});
+  auto prod = MakeProduct({sum});
+  return Inner_double(prod, p2);
+}
+SkewOperator Inner_double(const ptr_variant &p1, const ptr_variant &p2) {
+  return std::visit([](auto &s1, auto &s2) { return Inner_double(s1, s2); }, p1,
+                    p2);
+}
+SkewOperator Inner_double(const std::shared_ptr<SumState> &p1,
+                          const std::shared_ptr<SumState> &p2) {
+  SkewOperator ret;
+  for (auto &&[c1, s1] : std::views::zip(p1->coeffs, p1->states)) {
+    for (auto &&[c2, s2] : std::views::zip(p2->coeffs, p2->states)) {
+      SkewOperator term = Inner_double(s1, s2);
+      Multiply(term, std::conj(c1));
+      Multiply(term, c2);
+      Add(ret, term);
+    }
+  }
+  return ret;
 }

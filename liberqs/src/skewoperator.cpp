@@ -101,3 +101,22 @@ SkewOperator Multiply(const SkewOperator &o1, const SkewOperator &o2) {
   }
   return Simplify(ret);
 }
+
+SkewOperator Multiply_double(const SkewOperator &o1, const SkewOperator &o2) {
+  SkewOperator ret{};
+  for (const auto &kb1 : o1) {
+    for (const auto &kb2 : o2) {
+      SkewOperator o3 = Simplify(Inner(kb1.bra, kb2.ket));
+      SkewOperator o4 = Simplify(Inner(kb2.bra, kb1.ket));
+      for (auto &kb3 : o3) {
+        for (auto &kb4 : o4) {
+          complex coeff = kb1.coeff * kb2.coeff * kb3.coeff * kb4.coeff;
+          if (coeff != 0.0)
+            ret.AddKetBra({kb1.coeff * kb2.coeff * kb3.coeff * kb4.coeff,
+                           Tensor(kb3.ket, kb4.ket), Tensor(kb3.bra, kb4.bra)});
+        }
+      }
+    }
+  }
+  return Simplify(ret);
+}

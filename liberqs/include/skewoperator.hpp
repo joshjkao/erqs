@@ -80,3 +80,4 @@ std::ostream &operator<<(std::ostream &os, const KetBra &kb);
 void Add(SkewOperator &o1, const SkewOperator &o2);
 void Multiply(SkewOperator &o, const complex &c);
 SkewOperator Multiply(const SkewOperator &o1, const SkewOperator &o2);
+SkewOperator Multiply_double(const SkewOperator &o1, const SkewOperator &o2);

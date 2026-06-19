@@ -21,6 +21,19 @@ SkewOperator Inner(const ptr_variant &p1, const ptr_variant &p2);
 SkewOperator Inner(const std::shared_ptr<SumState> &p1,
                    const std::shared_ptr<SumState> &p2);
 
+// ---- INNER PRODUCTS ---- //
+SkewOperator Inner_double(const std::shared_ptr<PureState> &p1,
+                          const std::shared_ptr<PureState> &p2);
+SkewOperator Inner_double(const std::shared_ptr<ProductState> &p1,
+                          const std::shared_ptr<ProductState> &p2);
+SkewOperator Inner_double(const std::shared_ptr<ProductState> &p1,
+                          const std::shared_ptr<PureState> &p2);
+SkewOperator Inner_double(const std::shared_ptr<PureState> &p1,
+                          const std::shared_ptr<ProductState> &p2);
+SkewOperator Inner_double(const ptr_variant &p1, const ptr_variant &p2);
+SkewOperator Inner_double(const std::shared_ptr<SumState> &p1,
+                          const std::shared_ptr<SumState> &p2);
+
 using skewop_pool = std::vector<SkewOperator>;
 template <typename Func>
 concept OrderPolicy =

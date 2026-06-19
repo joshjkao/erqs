@@ -57,32 +57,32 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(TrialResult, args, real_inner, imag_inner,
 //   return ret;
 // };
 
-constexpr static auto policy_random = [](auto &bpool, const auto &,
-                                         auto &kpool) -> SkewOperator {
-  assert(!bpool.empty() || !kpool.empty());
-  static thread_local std::random_device rand{};
-  static thread_local std::mt19937 gen{rand()};
-  static thread_local std::uniform_int_distribution<> dist(0, 1);
-  std::ranges::shuffle(bpool, gen);
-  std::ranges::shuffle(kpool, gen);
-  if (bpool.empty()) {
-    auto ret = kpool.back();
-    kpool.pop_back();
-    return ret;
-  } else if (kpool.empty()) {
-    auto ret = bpool.back();
-    bpool.pop_back();
-    return ret;
-  }
-  if (dist(gen)) {
-    auto ret = kpool.back();
-    kpool.pop_back();
-    return ret;
-  }
-  auto ret = bpool.back();
-  bpool.pop_back();
-  return ret;
-};
+// constexpr static auto policy_random = [](auto &bpool, const auto &,
+//                                          auto &kpool) -> SkewOperator {
+//   assert(!bpool.empty() || !kpool.empty());
+//   static thread_local std::random_device rand{};
+//   static thread_local std::mt19937 gen{rand()};
+//   static thread_local std::uniform_int_distribution<> dist(0, 1);
+//   std::ranges::shuffle(bpool, gen);
+//   std::ranges::shuffle(kpool, gen);
+//   if (bpool.empty()) {
+//     auto ret = kpool.back();
+//     kpool.pop_back();
+//     return ret;
+//   } else if (kpool.empty()) {
+//     auto ret = bpool.back();
+//     bpool.pop_back();
+//     return ret;
+//   }
+//   if (dist(gen)) {
+//     auto ret = kpool.back();
+//     kpool.pop_back();
+//     return ret;
+//   }
+//   auto ret = bpool.back();
+//   bpool.pop_back();
+//   return ret;
+// };
 
 constexpr static auto policy_overlap = [](auto &bpool, const auto &ret,
                                           auto &kpool) -> SkewOperator {
@@ -116,12 +116,12 @@ constexpr static auto policy_overlap = [](auto &bpool, const auto &ret,
   return ret1;
 };
 
-std::array<std::string, 2> policy_names{"random", "overlap"};
+std::array<std::string, 1> policy_names{"overlap"};
 std::array<std::function<SkewOperator(std::vector<SkewOperator> &,
                                       const SkewOperator &,
                                       std::vector<SkewOperator> &)>,
-           3>
-    policies{policy_random, policy_overlap};
+           1>
+    policies{policy_overlap};
 
 auto do_test(const TrialArgs &args) -> TrialResult {
   auto [max_depth, n_terms, n_factors, h_terms, skip_slow] = args;
@@ -130,9 +130,8 @@ auto do_test(const TrialArgs &args) -> TrialResult {
   std::mt19937 gen{rd()};
 
   auto random_ket = RandomSumState(max_depth, n_terms, n_factors, space, gen);
-  // auto random_bra = RandomSumState(max_depth, n_terms, n_factors, space,
-  // gen);
-  auto random_bra = Clone(random_ket);
+  auto random_bra = RandomSumState(max_depth, n_terms, n_factors, space, gen);
+  // auto random_bra = Clone(random_ket);
 
   auto H = RandomHamiltonian(h_terms, ~QSpace{0}, gen);
 
@@ -149,6 +148,36 @@ auto do_test(const TrialArgs &args) -> TrialResult {
   }
 
   std::vector<FastInnerMetrics> fast_metrics;
+
+  auto [time_fast_double, inner_fast_double_op] =
+      time_in_ms([&]() { return Inner_double(random_bra, conj); });
+  complex inner_fast_double;
+  if (inner_fast_double_op.size() > 2)
+    throw std::runtime_error("skew op isn't a single term");
+  else if (inner_fast_double_op.empty())
+    inner_fast_double = 0;
+  else if (GetSpace(inner_fast_double_op[0].ket) != QSpace{0})
+    throw std::runtime_error("skewop isn't a number");
+  else if (GetSpace(inner_fast_double_op[0].bra) != QSpace{0})
+    throw std::runtime_error("skewop isn't a number");
+  else
+    inner_fast_double = inner_fast_double_op[0].coeff;
+
+  double real_error_double = std::abs(
+      (inner_slow.real() - inner_fast_double.real()) / inner_slow.real());
+  double imag_error_double = std::abs(
+      (inner_slow.imag() - inner_fast_double.imag()) / inner_slow.imag());
+
+  FastInnerMetrics metrics_double{
+      .policy = "double-contract",
+      .real_inner = inner_fast_double.real(),
+      .imag_inner = inner_fast_double.imag(),
+      .real_error = real_error_double,
+      .imag_error = imag_error_double,
+      .time_fast = time_fast_double,
+  };
+
+  fast_metrics.push_back(metrics_double);
 
   for (const auto &&[name, policy] : std::views::zip(policy_names, policies)) {
     auto [time_fast, inner_fast_op] =

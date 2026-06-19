@@ -44,10 +44,12 @@ def quick_metrics(path):
     df_naive = df[df["fast_policy"] == "naive"]
     df_random = df[df["fast_policy"] == "random"]
     df_overlap = df[df["fast_policy"] == "overlap"]
+    df_double = df[df["fast_policy"] == "double-contract"]
 
     print(f"mean time for naive order: {np.mean(df_naive['fast_time_fast'])}")
     print(f"mean time for random order: {np.mean(df_random['fast_time_fast'])}")
     print(f"mean time for overlap order: {np.mean(df_overlap['fast_time_fast'])}")
+    print(f"mean time for double contract: {np.mean(df_double['fast_time_fast'])}")
 
 
 if __name__ == "__main__":

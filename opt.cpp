@@ -35,7 +35,8 @@ int main() {
   auto seed = rd();
   std::mt19937 gen{seed};
   // auto root = RandomSumState(3, 2, 2, QSpace{"1111"}, gen);
-  QSpace space = ~QSpace{0};
+  // QSpace space = ~QSpace{0};
+  QSpace space = QSpace{"111111"};
   auto root = ZeroOneTensor(space);
 
   Simplify(root);
