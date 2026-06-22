@@ -4,7 +4,7 @@
 #include <memory>
 #include <variant>
 
-constexpr size_t NQUBITS = 16;
+constexpr size_t NQUBITS = 128;
 using complex = std::complex<double>;
 using QSpace = std::bitset<NQUBITS>;
 using BitString = std::bitset<NQUBITS>;
