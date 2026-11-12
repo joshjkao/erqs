@@ -6,6 +6,7 @@
 #include <memory>
 #include <nlopt.hpp>
 #include <optional>
+#include <random>
 #include <ranges>
 #include <stdexcept>
 #include <unordered_map>
@@ -94,14 +95,14 @@ size_t CountCoefficients_shallow(const std::shared_ptr<SumState> &state) {
 
 static size_t count_nodes(const std::shared_ptr<PureState> &) { return 1; }
 static size_t count_nodes(const std::shared_ptr<ProductState> &state) {
-  size_t ret = 0;
+  size_t ret = 1;
   for (const auto &s : state->states) {
     ret += CountNodes(s);
   }
   return ret;
 }
 size_t CountNodes(const std::shared_ptr<SumState> &state) {
-  size_t ret = 0;
+  size_t ret = 1;
   for (const auto &s : state->states) {
     ret += std::visit([](const auto &e) { return count_nodes(e); }, s);
   }
@@ -207,6 +208,33 @@ void AddRandomTerm(std::shared_ptr<SumState> &root, std::mt19937 &gen) {
   ptr_variant rand_state = RandomProductState(2, 3, 3, state->space, gen);
   state->coeffs.push_back({1.0, 0.0});
   state->states.push_back(rand_state);
+}
+
+void AddRandomTerm(std::shared_ptr<SumState> &root, size_t max_depth, std::mt19937 &gen) {
+  std::shared_ptr<SumState> state = PickRandomSum(root, gen);
+  std::uniform_int_distribution<size_t> dist(1uz, max_depth);
+  // size_t depth = dist(gen);
+  size_t n_terms = dist(gen);
+  size_t n_factors = dist(gen);
+  ptr_variant rand_state = RandomProductState(3, n_terms, n_factors, state->space, gen);
+  state->coeffs.push_back({1.0, 0.0});
+  state->states.push_back(rand_state);
+}
+
+void RemoveRandomTerm(std::shared_ptr<SumState> &root, std::mt19937 &gen) {
+  std::shared_ptr<SumState> state = PickRandomSum(root, gen);
+  if (state->coeffs.size() == 1) return;
+  std::vector<complex> new_coeffs;
+  std::vector<ptr_variant> new_states;
+  std::uniform_int_distribution<size_t> dist(0, state->coeffs.size() - 1uz);
+  size_t ind_remove = dist(gen);
+  for (size_t i = 0; i < state->coeffs.size(); ++i) {
+    if (i == ind_remove) continue;
+    new_coeffs.push_back(state->coeffs[i]);
+    new_states.push_back(state->states[i]);
+  }
+  state->coeffs = new_coeffs;
+  state->states = new_states;
 }
 
 void UnifyRandom(std::shared_ptr<SumState> &root, std::mt19937 &gen) {

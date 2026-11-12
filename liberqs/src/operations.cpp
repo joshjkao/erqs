@@ -43,7 +43,7 @@ constexpr static auto policy_overlap = [](auto &bpool, const auto &ret,
       k_curr_best = i;
     }
   }
-  if (b_curr_best > k_curr_best || (kpool.empty())) {
+  if (b_max_overlap > k_max_overlap || (kpool.empty())) {
     SkewOperator ret1 = bpool[b_curr_best];
     bpool.erase(bpool.begin() + static_cast<std::ptrdiff_t>(b_curr_best));
     return ret1;
@@ -203,10 +203,11 @@ double ExpectedValue(const PauliOperator &pauli,
                      const std::shared_ptr<SumState> &state) {
   auto ket = Operate(pauli, state);
   SkewOperator inner = Inner(state, ket);
+  double self_inner = Norm(state);
   assert(inner.size() == 1);
   assert(GetSpace(inner[0].bra) == QSpace{0});
   assert(GetSpace(inner[0].ket) == QSpace{0});
-  return inner[0].coeff.real();
+  return inner[0].coeff.real() / self_inner;
 }
 double ExpectedValue(const PauliHamiltonian &h,
                      const std::shared_ptr<SumState> &state) {

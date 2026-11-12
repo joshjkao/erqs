@@ -68,10 +68,11 @@ target_link_libraries(randomtest_policy PRIVATE erqs NLopt::nlopt cxxopts::cxxop
 add_executable(randomtest_io randomtest_io.cpp)
 target_link_libraries(randomtest_io PRIVATE erqs NLopt::nlopt cxxopts::cxxopts)
 
+find_package(argparse REQUIRED)
 
 # executable for optimizing
 add_executable(opt opt.cpp)
-target_link_libraries(opt PRIVATE erqs NLopt::nlopt)
+target_link_libraries(opt PRIVATE erqs NLopt::nlopt argparse::argparse)
 
 # executable for optimizing
 add_executable(randomtest_dense_skew randomtest_dense_skew.cpp)

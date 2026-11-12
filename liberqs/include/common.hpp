@@ -4,10 +4,13 @@
 #include <memory>
 #include <variant>
 
-constexpr size_t NQUBITS = 128;
+constexpr size_t NQUBITS = 6;
 using complex = std::complex<double>;
 using QSpace = std::bitset<NQUBITS>;
 using BitString = std::bitset<NQUBITS>;
+
+constexpr QSpace ONES{~QSpace{0}};
+constexpr QSpace ZEROS{0};
 
 struct PureState;
 struct ProductState;

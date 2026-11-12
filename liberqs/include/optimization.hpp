@@ -25,6 +25,8 @@ double OptimizeCoefficients_local(const PauliHamiltonian &H,
 // ---- STRUCTURE CHANGING ADJUSTMENTS ---- //
 void Prune(std::shared_ptr<SumState> &root, double threshold);
 void AddRandomTerm(std::shared_ptr<SumState> &root, std::mt19937 &gen);
+void AddRandomTerm(std::shared_ptr<SumState> &root, size_t max_depth, std::mt19937 &gen);
+void RemoveRandomTerm(std::shared_ptr<SumState> &root, std::mt19937 &gen);
 void UnifyRandom(std::shared_ptr<SumState> &root, std::mt19937 &gen);
 void Normalize_slow(std::shared_ptr<SumState> &root);
 void Normalize(std::shared_ptr<SumState> &root);

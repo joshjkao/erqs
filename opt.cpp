@@ -1,13 +1,17 @@
+#include "common.hpp"
+#include "hamiltonian.hpp"
 #include "operations.hpp"
 #include "optimization.hpp"
 #include "quantumstate.hpp"
 #include "validation.hpp"
+#include <argparse/argparse.hpp>
+#include <array>
 #include <chrono>
+#include <fstream>
 #include <iostream>
 #include <memory>
 #include <print>
 #include <random>
-#include <ranges>
 
 long time_in_ms(auto func) {
   auto start = std::chrono::high_resolution_clock::now();
@@ -19,25 +23,42 @@ long time_in_ms(auto func) {
 }
 
 void random_update(std::shared_ptr<SumState> root, std::mt19937 &gen) {
-  std::uniform_int_distribution<int> dist(0, 1);
+  std::uniform_int_distribution<int> dist(0, 2);
   int rand = dist(gen);
-  if (rand) {
+  if (rand == 0) {
     std::println("attempting a random term addition");
-    AddRandomTerm(root, gen);
-  } else {
+    AddRandomTerm(root, 3, gen);
+  } else if (rand == 1) {
     std::println("attempting a random unification");
     UnifyRandom(root, gen);
+  } else {
+    std::println("attempting to remove a random term");
+    RemoveRandomTerm(root, gen);
   }
 }
 
-int main() {
+int main(int argc, char **argv) {
+  auto parser = argparse::ArgumentParser{"optimizer", "0.1"};
+  parser.add_argument("-H", "--hamiltonian");
+  parser.add_argument("-U", "--updates").scan<'d', size_t>();
+  parser.add_argument("-L", "--lambda").scan<'g', double>();
+  parser.add_argument("-O", "--output").default_value("out.csv");
+
+  parser.parse_args(argc, argv);
+
+  std::string h_file = parser.get<std::string>("--hamiltonian");
+  size_t num_updates = parser.get<size_t>("--updates");
+  double lambda = parser.get<double>("--lambda");
+  std::string out_file = parser.get<std::string>("--output");
+
+  std::cout << "using hamiltonian " << h_file << "\n";
+  std::cout << "performing " << num_updates << "updates\n";
+
   std::random_device rd;
   auto seed = rd();
   std::mt19937 gen{seed};
-  // auto root = RandomSumState(3, 2, 2, QSpace{"1111"}, gen);
-  // QSpace space = ~QSpace{0};
-  QSpace space = QSpace{"111111"};
-  auto root = ZeroOneTensor(space);
+  auto root = ZeroOneTensor(ONES);
+  // auto root = RandomSumState(3, 2, 2, ONES, gen);
 
   Simplify(root);
   Validate(root, CHECK_ALL);
@@ -45,53 +66,60 @@ int main() {
   Print(root);
   std::cout << std::endl;
 
-  auto clone = Clone(root);
+  PauliHamiltonian H = ReadFromFile(h_file);
 
-  std::vector<double> coeffs;
-  std::vector<PauliOperator> locals;
+  Print(H);
 
-  QSpace zero{0};
-  for (auto i : std::views::iota(0uz, NQUBITS)) {
-    QSpace mask = QSpace{1} << i;
-    coeffs.push_back(1.0);
-    PauliOperator op{.x = zero, .y = mask, .z = zero};
-    locals.push_back(op);
-  }
+  auto cost_function = [=](std::shared_ptr<SumState> state,
+                          double energy) -> double {
+    return lambda * static_cast<double>(CountNodes(state)) + energy;
+  };
 
-  for (auto i : std::views::iota(0uz, NQUBITS)) {
-    QSpace mask = QSpace{3} << i;
-    coeffs.push_back(1.0);
-    PauliOperator op{.x = mask, .y = zero, .z = zero};
-    locals.push_back(op);
-  }
+  double minf_local = OptimizeCoefficients(H, root);
 
-  PauliHamiltonian H{.coeffs = coeffs, .operators = locals};
-
-  Visitor visitor{
-      .sum_visitor =
-          [&](auto state) { OptimizeCoefficients_local(H, root, state); },
-      .prod_visitor = [](auto) {},
-      .pure_visitor = [](auto) {}};
-
-  InvokeBottomUp(visitor, root);
-  double minf_local = ExpectedValue(H, root);
+  double current_cost = cost_function(root, minf_local);
   std::cout << "localized min " << minf_local << "\n";
 
-  double minf_global = OptimizeCoefficients(H, clone);
-  std::cout << "global min " << minf_global << " ";
+  std::vector<double> energies(num_updates, 0);
+  std::vector<size_t> n_nodes(num_updates, 0);
+  std::vector<double> free_energy(num_updates, 0);
 
-  Normalize(clone);
-  Print(clone);
+  for (size_t i = 0; i < num_updates; ++i) {
+    auto root_cpy = Clone(root);
+    random_update(root_cpy, gen);
+    Simplify(root_cpy);
+    Validate(root_cpy, CHECK_ALL);
+    Print(root_cpy);
 
-  Normalize(root);
+    // InvokeBottomUp(visitor, root_cpy);
+    double new_minf_local = OptimizeCoefficients(H, root_cpy);
+    std::cout << "localized min " << new_minf_local << "\n";
+
+    Normalize(root_cpy);
+
+    double new_cost = cost_function(root_cpy, new_minf_local);
+
+    if (new_cost <= current_cost) {
+      root = root_cpy;
+      minf_local = new_minf_local;
+      current_cost = new_cost;
+      std::cout << "change accepted\n";
+    } else {
+      std::cout << "change rejected\n";
+    }
+
+    energies[i] = minf_local;
+    n_nodes[i] = CountNodes(root);
+    free_energy[i] = current_cost;
+  }
+
   Print(root);
+  std::cout << "final minimum energy: " << minf_local << "\n";
 
-  auto inner_self1 = Inner_slow(root, root);
-  std::cout << inner_self1 << "\n";
-  auto inner_self2 = Inner_slow(root, root);
-  std::cout << inner_self2 << "\n";
-
-  auto inner = Inner_slow(clone, root);
-  std::cout << "inner between the two optimized states: " << inner << "\n";
-  std::cout << inner * std::conj(inner);
+  std::ofstream ofile(out_file);
+  ofile << "energy,memory,free_energy\n";
+  for (size_t i = 0; i < num_updates; ++i) {
+    ofile << energies[i] << "," << n_nodes[i] << "," << free_energy[i] << "\n";
+  }
+  ofile.close();
 }

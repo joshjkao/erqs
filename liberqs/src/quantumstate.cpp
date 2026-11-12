@@ -347,7 +347,7 @@ static ptr_variant random_product(size_t max_depth, size_t n_terms,
     return MakePure(space, bits);
   } else {
     std::vector<std::shared_ptr<SumState>> states;
-    for (size_t i = 0; i < n_terms && space.any(); ++i) {
+    for (size_t i = 0; i < n_factors && space.any(); ++i) {
       QSpace new_space = random_bitset(gen);
       new_space &= space;
       if (new_space.none())
