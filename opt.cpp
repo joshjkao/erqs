@@ -42,6 +42,8 @@ int main(int argc, char **argv) {
   parser.add_argument("-H", "--hamiltonian");
   parser.add_argument("-U", "--updates").scan<'d', size_t>();
   parser.add_argument("-L", "--lambda").scan<'g', double>();
+  parser.add_argument("-S", "--start-temperature").scan<'g', double>();
+  parser.add_argument("-E", "--end-temperature").scan<'g', double>();
   parser.add_argument("-O", "--output").default_value("out.csv");
 
   parser.parse_args(argc, argv);
@@ -50,9 +52,14 @@ int main(int argc, char **argv) {
   size_t num_updates = parser.get<size_t>("--updates");
   double lambda = parser.get<double>("--lambda");
   std::string out_file = parser.get<std::string>("--output");
+  const double T_start = parser.get<double>("--start-temperature");
+  const double T_end = parser.get<double>("--end-temperature");
 
   std::cout << "using hamiltonian " << h_file << "\n";
   std::cout << "performing " << num_updates << "updates\n";
+  std::cout << "starting temperature " << T_start << "\n";
+  std::cout << "ending temperature " << T_end << "\n";
+  std::cout << "lambda is " << lambda << "\n";
 
   std::random_device rd;
   auto seed = rd();
@@ -70,42 +77,73 @@ int main(int argc, char **argv) {
 
   Print(H);
 
-  auto cost_function = [=](std::shared_ptr<SumState> state,
-                          double energy) -> double {
-    return lambda * static_cast<double>(CountNodes(state)) + energy;
+  auto cost_function = [](std::shared_ptr<SumState> state, double energy,
+                          double lambda_) -> double {
+    return lambda_ * static_cast<double>(CountNodes(state)) + energy;
   };
 
   double minf_local = OptimizeCoefficients(H, root);
 
-  double current_cost = cost_function(root, minf_local);
+  double current_cost = cost_function(root, minf_local, lambda);
   std::cout << "localized min " << minf_local << "\n";
 
   std::vector<double> energies(num_updates, 0);
   std::vector<size_t> n_nodes(num_updates, 0);
   std::vector<double> free_energy(num_updates, 0);
 
+  std::uniform_real_distribution<double> uniform_dist(0.0, 1.0);
+
+  // Track the best state seen so far, since uphill MC moves can temporarily
+  // worsen current_cost
+  auto best_root = Clone(root);
+  double best_cost = current_cost;
+
+  const double max_step =
+      static_cast<double>(num_updates > 1uz ? num_updates - 1uz : 1uz);
+
   for (size_t i = 0; i < num_updates; ++i) {
+    // Exponential cooling schedule (set T_start == T_end for fixed-temperature
+    // MC)
+    double progress = static_cast<double>(i) / max_step;
+    double T_mc = T_start * std::pow(T_end / T_start, progress);
+
     auto root_cpy = Clone(root);
     random_update(root_cpy, gen);
     Simplify(root_cpy);
     Validate(root_cpy, CHECK_ALL);
     Print(root_cpy);
 
-    // InvokeBottomUp(visitor, root_cpy);
     double new_minf_local = OptimizeCoefficients(H, root_cpy);
     std::cout << "localized min " << new_minf_local << "\n";
 
     Normalize(root_cpy);
 
-    double new_cost = cost_function(root_cpy, new_minf_local);
+    // cost_function evaluates F = E + lambda * Memory(root_cpy)
+    double new_cost = cost_function(root_cpy, new_minf_local, lambda);
+    double delta_cost = new_cost - current_cost;
 
-    if (new_cost <= current_cost) {
-      root = root_cpy;
+    bool accept = false;
+    if (delta_cost <= 0.0) {
+      accept = true;
+    } else if (T_mc > 0.0) {
+      double acceptance_prob = std::exp(-delta_cost / T_mc);
+      accept = (uniform_dist(gen) < acceptance_prob);
+    }
+
+    if (accept) {
+      root = std::move(root_cpy);
       minf_local = new_minf_local;
       current_cost = new_cost;
-      std::cout << "change accepted\n";
+      std::cout << "change accepted (dF = " << delta_cost << ", T = " << T_mc
+                << ")\n";
+
+      if (current_cost < best_cost) {
+        best_root = Clone(root);
+        best_cost = current_cost;
+      }
     } else {
-      std::cout << "change rejected\n";
+      std::cout << "change rejected (dF = " << delta_cost << ", T = " << T_mc
+                << ")\n";
     }
 
     energies[i] = minf_local;
